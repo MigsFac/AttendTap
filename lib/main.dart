@@ -1415,7 +1415,9 @@ class _ConfigScreenState extends State<ConfigScreen>{
   bool _isLoaded = false;
   final String androidAdId = 'ca-app-pub-3940256099942544/9214589741';
   final String iOsAdId = 'ca-app-pub-3940256099942544/2435281174';
-  
+  //test_android_nativeBannerID:ca-app-pub-3940256099942544/9214589741
+  //test_iOS_nativeBannerID:ca-app-pub-3940256099942544/2435281174
+ 
 
   @override
   void initState(){

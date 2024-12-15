@@ -90,7 +90,7 @@ ios/Runner.xcworkspace
 .vscode/
 .idea/
 /windows/
-/ios/
+
 /linux/
 /macos/
 /test/
