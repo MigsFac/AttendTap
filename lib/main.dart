@@ -16,15 +16,14 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:async_preferences/async_preferences.dart';
 import 'package:flutter/services.dart';
+import 'package:restart_app/restart_app.dart';
 
 
 void main() async {
+  final time = Stopwatch()..start();  //計測１
   WidgetsFlutterBinding.ensureInitialized();
-  await AppTrackingTransparency.requestTrackingAuthorization();
- 
-  await MobileAds.instance.initialize();
-
   await DatabaseHelper.getDatabaseInstance();
+  
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]).then((_){
@@ -32,6 +31,14 @@ void main() async {
     navigatorObservers: [MyNavigatorObserver()],
   ));
   });
+
+  Future.wait([
+  AppTrackingTransparency.requestTrackingAuthorization(),
+  MobileAds.instance.initialize(),
+  ]);
+  time.stop();  //計測１終了
+  debugPrint('main time:${time.elapsedMilliseconds} ms');
+
 }
 
 class MyApp extends StatefulWidget {
@@ -68,9 +75,9 @@ class _MyAppState extends State<MyApp> {
   
   void initConsent() async {
     final params = ConsentRequestParameters(
-      //consentDebugSettings: ConsentDebugSettings(
-      //  debugGeography: DebugGeography.debugGeographyEea,
-      //  testIdentifiers:["",],),   
+      consentDebugSettings: ConsentDebugSettings(
+        debugGeography: DebugGeography.debugGeographyEea,
+        testIdentifiers:["",],),  
     );
 
     ConsentInformation.instance.requestConsentInfoUpdate(params,()async{
@@ -1040,7 +1047,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       String dateFormatString = L10n.of(context)!.date_format;
                   return Padding(
                     padding: const EdgeInsets.all(10),
-                    child: Text( intl.DateFormat(dateFormatString).format(currentYmdhms.value) ,  //y年\nM月d日
+                    child: Text( intl.DateFormat(dateFormatString).format(currentYmdhms.value) ,  //y年M月d日
                       style: const TextStyle(fontSize: 25, fontWeight:FontWeight.bold),
                     ),
                   );
@@ -1051,20 +1058,20 @@ class _HomeScreenState extends State<HomeScreen> {
           
           //中央
           Positioned(
-            top: 105,
+            top: 100,
             left: 0,
             right: 0,
+            height: usableHeight - 450 >= 250 ? usableHeight - 250 - 250 - 100 : 100,
             child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [ 
-              Align(
-                child:
+              //Align(
+              //  child:
                 ValueListenableBuilder<DateTime>(
                   valueListenable: currentYmdhms,
                   builder: (context,time,child){
 
-                  return Column(
-                    
+                  return Column(                  
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(children:[
@@ -1092,16 +1099,27 @@ class _HomeScreenState extends State<HomeScreen> {
                           : intl.DateFormat('ss').format(currentYmdhms.value),
                         style: const TextStyle(fontSize:23),
                       )
-
                       ],),
                     ],
                   );
                 },), 
+              //),
+                       
+          ],//columnchild
+          ),
+          ),
+          
 
-              ),
-              const SizedBox(height:20),
-
-              Padding(padding: const EdgeInsets.symmetric(horizontal:20),
+          //真ん中下
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10,0,10,32.0),
+              child:  
+              Column(
+                mainAxisSize:MainAxisSize.min,
+                children:[
+            Padding(padding: const EdgeInsets.symmetric(horizontal:20),
               child:
               Row (
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1134,9 +1152,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               ),
             
-            //真ん中Reasonリスト、上のコラムの中に。
             const SizedBox(height:10),
-            
 
             FutureBuilder<List<Map<String, dynamic>>>(
               future: AttendanceLogic.overtimeReasonRecords(),// データ取得
@@ -1154,7 +1170,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return Container(
               width: MediaQuery.of(context).size.width * 0.85,
-              height: usableHeight -450,
+              height: usableHeight -450 >= 250 ? 250 : usableHeight -450,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey),
                 borderRadius: BorderRadius.circular(8),
@@ -1221,26 +1237,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );//container
               },//builder?
             ),//futurebuilder
-            
-          ],//columnchild
-          ),
-          ),
-
-
-              
-          
-          
-          
-
-          //真ん中下
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10,0,10,32.0),
-              child:  
-              Column(
-                mainAxisSize:MainAxisSize.min,
-                children:[
+            const SizedBox(height:15),
                   
                   Row (
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1496,7 +1493,18 @@ class _ConfigScreenState extends State<ConfigScreen>{
               onPressed:()async{
                 Navigator.of(context).pop();
                 ConsentInformation.instance.reset();
-                await changePrivacyPreferences();
+                setState((){ _bannerAd = null;});
+               
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Restart the app."),duration:Duration(milliseconds: 2000),)
+                );
+                await Future.delayed(const Duration(milliseconds:2000));
+                Restart.restartApp(
+                  notificationTitle: 'Restarting App',
+		              notificationBody: 'Please tap here to open the app again.',
+                );
+                
+                                 
               },
             ),
           ]
@@ -1507,9 +1515,9 @@ class _ConfigScreenState extends State<ConfigScreen>{
 
   Future<void> changePrivacyPreferences()async{
     final status = ConsentRequestParameters(
-      //consentDebugSettings: ConsentDebugSettings(
-      //  debugGeography: DebugGeography.debugGeographyEea,
-      //  testIdentifiers:["",],),
+      consentDebugSettings: ConsentDebugSettings(
+        debugGeography: DebugGeography.debugGeographyEea,
+        testIdentifiers:["",],),
     );
       ConsentInformation.instance.requestConsentInfoUpdate(status,()async{
         ConsentForm.showPrivacyOptionsForm((formError){
@@ -1581,6 +1589,12 @@ class _ConfigScreenState extends State<ConfigScreen>{
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final navigationBarHeight = MediaQuery.of(context).padding.bottom;
+    final appBarHeight = AppBar().preferredSize.height;
+
+    final usableHeight = screenHeight - statusBarHeight - navigationBarHeight - appBarHeight;
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
@@ -1602,7 +1616,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                 return const CircularProgressIndicator();  // ローディング表示
             } else if (snapshot.hasData && snapshot.data == true) {
               return Positioned(
-                top: 50,
+                top: _bannerAd == null ? 0 : _bannerAd!.size.height.toDouble(),
                 right:5,
                 child:TextButton(
                 onPressed:() => _withdrawalModal(context),
@@ -1610,10 +1624,9 @@ class _ConfigScreenState extends State<ConfigScreen>{
               ),);
             } 
             return const SizedBox.shrink();
-  },),
+        },),
 
         Column(children:[
-        //const SizedBox(height:10),
 
         if (_bannerAd != null && _isLoaded)
           Container( 
@@ -1627,12 +1640,12 @@ class _ConfigScreenState extends State<ConfigScreen>{
         ),
         
         
-        const SizedBox(height:15),
+        const SizedBox(height:10),
         
 
         Row(
           children: [
-            const SizedBox(width:15),
+            const SizedBox(width:20),
             Container(
               width:105,
               child:
@@ -1728,17 +1741,17 @@ class _ConfigScreenState extends State<ConfigScreen>{
           children:[
             
             //const Spacer(),
-            const SizedBox(height:20),
+            
             Text(L10n.of(context)!.itemlist,  //項目リスト
                       style: const TextStyle(fontSize:20),
                       ),
-            const SizedBox(height:10),
+            const SizedBox(height:5),
             Row(children:[  
               const SizedBox(width:20),
               Container(
                 
                 width: MediaQuery.of(context).size.width *0.8,
-                height: 200,
+                height: usableHeight -450 >= 250 ? 250 : usableHeight -450,
                 decoration: BoxDecoration(
                   border: Border.all(color:Colors.grey),
                   borderRadius: BorderRadius.circular(8),
@@ -1827,7 +1840,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
             ),
             Column(     
               children:[
-              const SizedBox(height:120),
+              SizedBox(height:usableHeight -450 >= 250 ? 125 : (usableHeight - 450)/2),
               IconButton(
                 icon:const Icon(Icons.expand_less),
                 onPressed:()async{
