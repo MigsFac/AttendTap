@@ -1,0 +1,3 @@
+<resources>
+    <string name="ADMOB_APP_ID">${ADMOB_APP_ID}</string>
+</resources>

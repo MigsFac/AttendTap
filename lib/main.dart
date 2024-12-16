@@ -17,6 +17,8 @@ import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:async_preferences/async_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:restart_app/restart_app.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+//import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 
 void main() async {
@@ -33,6 +35,7 @@ void main() async {
   });
 
   Future.wait([
+  dotenv.load(fileName: ".env"),
   AppTrackingTransparency.requestTrackingAuthorization(),
   MobileAds.instance.initialize(),
   ]);
@@ -75,9 +78,9 @@ class _MyAppState extends State<MyApp> {
   
   void initConsent() async {
     final params = ConsentRequestParameters(
-      consentDebugSettings: ConsentDebugSettings(
-        debugGeography: DebugGeography.debugGeographyEea,
-        testIdentifiers:["",],),  
+      //consentDebugSettings: ConsentDebugSettings(
+      //  debugGeography: DebugGeography.debugGeographyEea,
+      //  testIdentifiers:["",],),  
     );
 
     ConsentInformation.instance.requestConsentInfoUpdate(params,()async{
@@ -1410,11 +1413,9 @@ class _ConfigScreenState extends State<ConfigScreen>{
   final String enQAndAUrl = 'https://butternut-beetle-638.notion.site/FAQ-157ff023717a8074924cd52b4d5a1add?pvs=4';
   BannerAd? _bannerAd;
   bool _isLoaded = false;
-  final String androidAdId = 'ca-app-pub-3940256099942544/9214589741';
-  final String iOsAdId = 'ca-app-pub-3940256099942544/2435281174';
-  //test_android_nativeBannerID:ca-app-pub-3940256099942544/9214589741
-  //test_iOS_nativeBannerID:ca-app-pub-3940256099942544/2435281174
- 
+  final String androidAdId = dotenv.env['ANDROID_ADMOB_ID'] ?? 'ca-app-pub-3940256099942544/9214589741';
+  final String iOsAdId = dotenv.env['IOS_ADMOB_ID'] ?? 'ca-app-pub-3940256099942544/2435281174';
+  
 
   @override
   void initState(){
@@ -1515,9 +1516,9 @@ class _ConfigScreenState extends State<ConfigScreen>{
 
   Future<void> changePrivacyPreferences()async{
     final status = ConsentRequestParameters(
-      consentDebugSettings: ConsentDebugSettings(
-        debugGeography: DebugGeography.debugGeographyEea,
-        testIdentifiers:["",],),
+      //consentDebugSettings: ConsentDebugSettings(
+      //  debugGeography: DebugGeography.debugGeographyEea,
+      //  testIdentifiers:["",],),
     );
       ConsentInformation.instance.requestConsentInfoUpdate(status,()async{
         ConsentForm.showPrivacyOptionsForm((formError){

@@ -453,6 +453,7 @@
 		249021D3217E4FDB00AE95B9 /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ADMOB_APP_ID_IOS = "$(ADMOB_APP_ID_IOS)";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -536,6 +537,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7411750F4C07702DD7D3DA19 /* Pods-RunnerTests.debug.xcconfig */;
 			buildSettings = {
+				ADMOB_APP_ID_IOS = "$(ADMOB_APP_ID)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -555,6 +557,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = BAEA8E342A5838BAF348AC2F /* Pods-RunnerTests.release.xcconfig */;
 			buildSettings = {
+				ADMOB_APP_ID_IOS = "$(ADMOB_APP_ID)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -572,6 +575,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 3E5AF05946B2F19E699860BB /* Pods-RunnerTests.profile.xcconfig */;
 			buildSettings = {
+				ADMOB_APP_ID_IOS = "$(ADMOB_APP_ID)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -588,6 +592,7 @@
 		97C147031CF9000F007C117D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ADMOB_APP_ID_IOS = "$(ADMOB_APP_ID_IOS)";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -648,6 +653,7 @@
 		97C147041CF9000F007C117D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ADMOB_APP_ID_IOS = "$(ADMOB_APP_ID_IOS)";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;

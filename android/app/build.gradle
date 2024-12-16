@@ -2,7 +2,11 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
-    
+}
+def localProperties = new Properties()
+def localFile = rootProject.file("local.properties")
+if (localFile.exists()) {
+    localProperties.load(new FileInputStream(localFile))
 }
 
 android {
@@ -20,13 +24,18 @@ android {
         jvmTarget = JavaVersion.VERSION_1_8
     }
     
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "tech.migsfactory.attendtap"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = 4
         versionName = "1.0.0"
-       
+        buildConfigField("String", "ADMOB_APP_ID", "\"${localProperties["ADMOB_APP_ID"]}\"")
+        resValue "string", "ADMOB_APP_ID", "\"${localProperties['ADMOB_APP_ID']}\""
     }
     
 
@@ -49,6 +58,7 @@ android {
             signingConfig  signingConfigs.release
             minifyEnabled  false
             shrinkResources  false
+            
         }
     }
 }
