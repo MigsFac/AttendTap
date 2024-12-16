@@ -1130,7 +1130,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   
                   ElevatedButton(
                     onPressed: ()async {
-                      free = await _showInputFreeDialog(context,free);    
+                      free = await _showInputFreeDialog(context,free); 
+                      setState((){});   
                     },
                     style: ElevatedButton.styleFrom(
                       side: BorderSide(
