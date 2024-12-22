@@ -72,12 +72,21 @@
     "edit":"編集",
     "newinput":"新規入力",
     "date_formatlong":"y年M月d日(EEE)",
-    "attendance_time":"出勤時間：",
-    "leavework_time":"退勤時間：", 
+    "attendance_time":"出勤時間",
+    "leavework_time":"退勤時間", 
     "regist":"登録",
 
     "item":"項目：",
-    "remarks":"備考：",
+    "remarks":"備考",
     "year":"年",
-    "month":"月"
+    "month":"月",
+
+    "ontime":"定時設定",
+    "notset":"未設定",
+    "close":"閉じる",
+    "inwork":"出勤",
+    "outwork":"退勤",
+    "ok":"決定",
+    "cancel":"キャンセル",
+    "reason":"理由"
 }

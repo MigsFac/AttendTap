@@ -31,8 +31,8 @@
     "time_adjusment":"Adjustment",
     "settime":"Set Time",
     "currenttime":"Current Time",
-    "atwork":"ClockIn",
-    "leavingwork":"ClockOut",
+    "atwork":"Clock In",
+    "leavingwork":"Clock Out",
     "list":"List",
     "config":"Settings",
 
@@ -72,12 +72,21 @@
     "edit":"Edit",
     "newinput":"New Input",
     "date_formatlong":"yyyy-MM-dd (EEE)",
-    "attendance_time":"Attendance Time:",
-    "leavework_time":"Leave Work Time:",
+    "attendance_time":"Clock In",
+    "leavework_time":"Clock Out",
     "regist":"Register",
 
     "item":"Item:",
-    "remarks":"Remarks:",
+    "remarks":"Remarks",
     "year":" -",
-    "month":""
+    "month":"",
+
+    "ontime":"Set On Time",
+    "notset":"Not Set",
+    "close":"Close",
+    "inwork":"In",
+    "outwork":"Out",
+    "ok":"Ok",
+    "cancel":"Cancel",
+    "reason":"Reason"
 }
