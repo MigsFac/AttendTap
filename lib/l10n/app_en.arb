@@ -88,5 +88,8 @@
     "outwork":"Out",
     "ok":"Ok",
     "cancel":"Cancel",
-    "reason":"Reason"
+    "reason":"Reason",
+    "totalovertime":"Monthly overtime hours",
+    "overtime":"overtime"
+
 }

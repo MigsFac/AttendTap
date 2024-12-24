@@ -88,5 +88,7 @@
     "outwork":"退勤",
     "ok":"決定",
     "cancel":"キャンセル",
-    "reason":"理由"
+    "reason":"理由",
+    "totalovertime":"月の超過勤務時間",
+    "overtime":"超過勤務"
 }

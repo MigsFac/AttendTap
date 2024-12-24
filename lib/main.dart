@@ -1942,8 +1942,17 @@ class _ConfigScreenState extends State<ConfigScreen>{
                   setState((){});
                 },
                 child: 
-                   Text( onTimeIn != null && onTimeOut != null ? "${L10n.of(context)!.inwork}  ${MaterialLocalizations.of(context).formatTimeOfDay(onTimeIn, alwaysUse24HourFormat: true)}   ${L10n.of(context)!.outwork}  ${MaterialLocalizations.of(context).formatTimeOfDay(onTimeOut, alwaysUse24HourFormat: true)}": L10n.of(context)!.notset,
-                   style: const TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,)),             
+                  Row(children:[
+                   Text( onTimeIn != null  
+                    ? "${L10n.of(context)!.inwork}  ${MaterialLocalizations.of(context).formatTimeOfDay(onTimeIn, alwaysUse24HourFormat: true)} "
+                    : "${L10n.of(context)!.inwork}  ${L10n.of(context)!.notset}",
+                   style: const TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,)), 
+                   const SizedBox(width:5),
+                   Text( onTimeOut != null  
+                    ? "${L10n.of(context)!.outwork}  ${MaterialLocalizations.of(context).formatTimeOfDay(onTimeOut, alwaysUse24HourFormat: true)}"
+                    : "${L10n.of(context)!.outwork}  ${L10n.of(context)!.notset}",
+                   style: const TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,)),            
+                ]),
                 ),
                 
               ],);
@@ -2404,26 +2413,59 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
               }
               final prefsData = snap.data!;
 
+              if (prefsData['onTimeIn'] != null){
+                onTimeIn = stringToTimeOfDay(prefsData['onTimeIn']);
+              }
+              if (prefsData['onTimeOut'] != null){
+                onTimeOut = stringToTimeOfDay(prefsData['onTimeOut']);
+              }
+
+              int timeIn = 0;
+              int timeOut = 0;
+              for (int i = 0; i< records.length; i++){                
+                if (onTimeIn != null && records[i]['check_in']!=null){
+                  TimeOfDay checkInTOD =  stringToTimeOfDay(records[i]['check_in']);
+                  int onTimeInMinute = onTimeIn!.hour * 60 + onTimeIn!.minute;
+                  int checkInMinute = checkInTOD!.hour * 60 + checkInTOD!.minute;
+                  if (onTimeInMinute > checkInMinute){
+                    timeIn = timeIn + onTimeInMinute - checkInMinute;
+                  }
+                }
+                if (onTimeOut != null && records[i]['check_out']!=null){
+                  TimeOfDay checkOutTOD =  stringToTimeOfDay(records[i]['check_out']);
+                  int onTimeOutMinute = onTimeOut!.hour * 60 + onTimeOut!.minute;
+                  int checkOutMinute = checkOutTOD!.hour * 60 + checkOutTOD!.minute;
+                  if (onTimeOutMinute < checkOutMinute){
+                    timeOut = timeOut - onTimeOutMinute + checkOutMinute;
+                  }
+                }
+              }
+              int totalOvertime = timeIn + timeOut;
+              TimeOfDay totalOvertimeTOD = TimeOfDay(hour: totalOvertime ~/60,minute:totalOvertime % 60);
+              String totalOvertimeTODhmString = "${totalOvertimeTOD.hour}h ${totalOvertimeTOD.minute}m"; 
+              if (prefsData['onTimeIn'] == null && prefsData['onTimeOut'] == null){totalOvertimeTODhmString = L10n.of(context)!.notset;}
 
               return ListView.builder(
                 controller: _scrollController,
-                itemCount:records.length+1,//１つ下の余白に使う
+                itemCount:records.length+2,//１つ下の余白に使う,1つtotal overtime用に追加
                 itemBuilder: (context,index){
                   
+                  if (index == 0){
+                    return Padding(padding: const EdgeInsets.only(right:20),
+                      child: Align(
+                      alignment:Alignment.centerRight,
+                      child:Text('${L10n.of(context)!.totalovertime} : $totalOvertimeTODhmString'),
+                    ),);
+                  }
 
-                  if (index == records.length){
+                  if (index == records.length+1){
                       return const SizedBox(height:100);
                   }
 
-                  final record = records[index];
+                  final record = records[index-1];
                   final formatDate = formatDateString(record['date']);
 
-                  if (prefsData['onTimeIn'] != null){
-                    onTimeIn = stringToTimeOfDay(prefsData['onTimeIn']);
-                  }
-                  if (prefsData['onTimeOut'] != null){
-                    onTimeOut = stringToTimeOfDay(prefsData['onTimeOut']);
-                  }
+                  
                   if (record['check_in'] != null){
                     checkIn = stringToTimeOfDay(record['check_in']);
                   }
@@ -2460,7 +2502,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                     onTap: (){
                       _currentScrollPosition = _scrollController.position.pixels;
                       setState((){
-                        selectedIndex = index;
+                        selectedIndex = index-1;
                       });
                       Future.delayed(const Duration(milliseconds:50),(){
                         _scrollController.jumpTo(_currentScrollPosition!);
@@ -2468,18 +2510,18 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                       
                       },
                     onLongPress:()async{
-                      final String? result = await _showEditDialog(context,records[index]);
+                      final String? result = await _showEditDialog(context,records[index-1]);
                       _stateValue = result ?? 'state';
                       setState((){});
                     },
                     child: Container(
                       margin: const EdgeInsets.symmetric(vertical:2,horizontal:15),
                       decoration: BoxDecoration(
-                        color: selectedIndex == index
+                        color: selectedIndex == index-1
                           ? const Color(0x156E79CF)
                           : Colors.transparent,
                         border: Border.all(
-                          color: selectedIndex == index
+                          color: selectedIndex == index-1
                             ? const Color(0x8F6E79CF)
                             : Colors.transparent,
                           width:2,
@@ -2490,10 +2532,13 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                       child: Column(
                         crossAxisAlignment:CrossAxisAlignment.start,
                         children: [
-                          Row(children:[
+                          Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,
+                            children:[
                             Text('Date: $formatDate',
                               style:const TextStyle(fontWeight:FontWeight.bold,)),
-                            Text(overtime != 0 ? '  overtime: ${overtimeTimeOfDay.hour}h${overtimeTimeOfDay.minute}m' : ""),
+                            Text(overtime != 0 ? '${L10n.of(context)!.overtime}: ${overtimeTimeOfDay.hour}h${overtimeTimeOfDay.minute}m' : "",
+                              style:const TextStyle(fontSize:12)),
+                            const SizedBox.shrink(),
                           ],),
                           Row(children:[
                             Text('${L10n.of(context)!.attendance_time} : ${record['check_in'] ?? 'N/A'}'),
@@ -3227,11 +3272,43 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
         
         final records = await AttendanceLogic.allRecords();
         final events = <DateTime, List<String>>{};
-       
+        var functions = Functions();
+        final prefData = await functions.getSharedPref();
+        TimeOfDay? onTimeIn;
+        TimeOfDay? onTimeOut;
+        int onTimeInMin = 0;
+        int onTimeOutMin = 0;
+        if (prefData['onTimeIn'] != null){
+          onTimeIn = stringToTimeOfDay(prefData['onTimeIn']);
+          onTimeInMin = onTimeIn.hour *60 + onTimeIn.minute;
+        }
+        if (prefData['onTimeOut'] != null){
+          onTimeOut = stringToTimeOfDay(prefData['onTimeOut']);
+          onTimeOutMin = onTimeOut.hour *60 + onTimeOut.minute;
+        }
+
         for (var record in records){
           DateTime eventDate = DateTime.parse(record['date']);
           eventDate = DateTime(eventDate.year,eventDate.month,eventDate.day);
 
+          int overtimeInMin =0 ;
+          int overtimeOutMin = 0;
+          if (record['check_in'] != null){
+            TimeOfDay? checkInTOD = stringToTimeOfDay(record['check_in']);
+            int checkInMin = checkInTOD.hour *60 + checkInTOD.minute;
+            if (onTimeInMin > checkInMin){overtimeInMin = onTimeInMin - checkInMin;}
+          }
+          if (prefData['onTimeIn'] == null){overtimeInMin = 0;}
+          if (record['check_out'] != null){
+            TimeOfDay? checkOutTOD = stringToTimeOfDay(record['check_out']);
+            int checkOutMin = checkOutTOD.hour *60 + checkOutTOD.minute;
+            if (onTimeOutMin < checkOutMin){overtimeOutMin = checkOutMin - onTimeOutMin ;}
+          }
+          if (prefData['onTimeOut'] == null){overtimeOutMin = 0;}
+          int overtime = overtimeInMin + overtimeOutMin;
+          TimeOfDay overtimeTOD = TimeOfDay(hour:overtime ~/ 60,minute:overtime % 60);
+          String overtimeTODString = "\n ${L10n.of(context)!.overtime} : ${overtimeTOD.hour}h ${overtimeTOD.minute}m";
+          if (prefData['onTimeOut'] == null && prefData['onTimeIn'] == null){overtimeTODString = "";}
           String checkIn = record['check_in'] ?? 'N/A';
           checkIn = '${L10n.of(context)!.inwork} : $checkIn';
           String checkOut = record['check_out'] ?? 'N/A';
@@ -3244,7 +3321,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
           String? monthDate = intl.DateFormat(dateFormatLong).format(eventDate);
           
           events[eventDate] ??= [];
-          events[eventDate]!.add('$monthDate \n $checkIn   $checkOut \n ${L10n.of(context)!.item}$overtimeReason \n ${L10n.of(context)!.remarks} : $free');  //項目：、備考：
+          events[eventDate]!.add('$monthDate $overtimeTODString\n $checkIn   $checkOut \n ${L10n.of(context)!.item}$overtimeReason \n ${L10n.of(context)!.remarks} : $free');  //項目：、備考：
           }
         return events;
       }
