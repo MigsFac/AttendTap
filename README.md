@@ -28,8 +28,13 @@ flutter初めてでしたが、htmlやcssで作るのと似たような感覚で
 現在google playの審査待ち。~~iOSは途中からビルドできない問題が発生し、登録料も高いため保留中。（flutterの意味..）~~ iOSも申請中。
 
 ## 使用技術
-・flutter  
-・SQLite
+- flutter  
+- SQLite
+
+## 更新情報
+### v1.1.0 (2024-12-24)
+- 定時設定を追加。超過勤務時間を一覧画面に表示。
+- UI微調整
 
 ## 連絡先
 migsfactory[アット]gmail.com  
