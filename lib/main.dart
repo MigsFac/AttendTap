@@ -844,14 +844,14 @@ class AttendanceLogic {
     }
   } 
 
-  static Future<void> updateOvertimeReason(context,String inputTxt,int itemId) async{
+  static Future<bool> updateOvertimeReason(context,String inputTxt,int itemId) async{
     final db = await DatabaseHelper.getDatabaseInstance();
     final reason = await db.query('overtime_reason_table',columns:['overtime_reason'],where:'overtime_reason=? AND available = ?',whereArgs:[inputTxt,1],limit:1,);
     
     if (reason.isNotEmpty){
       var functions = Functions();
       functions.informationModal(L10n.of(context)!.error,"${inputTxt}${L10n.of(context)!.yetregist}",context,);  //エラー、はすでに登録済みです。
-      return;
+      return false;
     } else {
       await db.update(
       'overtime_reason_table',
@@ -859,6 +859,7 @@ class AttendanceLogic {
       where: 'id = ?',
       whereArgs: [itemId],
     );
+      return true;
     }
   }
 
@@ -1646,10 +1647,13 @@ class _ConfigScreenState extends State<ConfigScreen>{
                   functions.informationModal(L10n.of(context)!.error,L10n.of(context)!.itemname,context,); //"エラー","項目名を入力してください。"
                   return;
                 }
-                AttendanceLogic.updateOvertimeReason(context,_controller.text,itemId);
-                Navigator.of(context).pop();
-                functions.informationModal(L10n.of(context)!.edit_complete,"${_controller.text}${L10n.of(context)!.edited}",context,);  //編集完了、編集しました。
-                  
+                bool updateBool = await AttendanceLogic.updateOvertimeReason(context,_controller.text,itemId);
+                
+                if (updateBool){ 
+                  Navigator.of(context).pop();
+                  functions.informationModal(L10n.of(context)!.edit_complete,"${_controller.text}${L10n.of(context)!.edited}",context,);  //編集完了、編集しました。
+                  setState((){});
+                }
               },
               child: const Text('OK'),
             ),
@@ -2037,7 +2041,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                           onLongPress:()async{
                             await _showEditItemNameDialog(context,record['id']);
                             
-                            setState((){});
+                            setState((){selectedIndex = index;});
                           },
                           
                       child: Container(
