@@ -387,6 +387,7 @@ class AttendanceUtils {
       flagInOut:flagInOut,
       overtimeReason:overtimeReason,
       date:date,
+      context:context,
     );
     //重複確認
   final l10n = L10n.of(context)! ;
@@ -400,7 +401,7 @@ class AttendanceUtils {
       return;
     }
     final duplicateCheck =  await duplicateInOutByDate(record["date"]);
-    if ((flagInOut == 'in' && duplicateCheck?['check_in'] !='N/A' ) || (flagInOut == 'out' && duplicateCheck?['check_out'] !='N/A' )){
+    if ((flagInOut == 'in' && duplicateCheck?['check_in'] !=L10n.of(context)!.unregistered ) || (flagInOut == 'out' && duplicateCheck?['check_out'] !=L10n.of(context)!.unregistered )){
       String flagInOutString = "";
       if(flagInOut == 'in'){
         flagInOutString = l10n.attendance_time;
@@ -498,7 +499,7 @@ class AttendanceUtils {
   }
   }
   static Future<void> _updateRecord(BuildContext context, Map<String, dynamic> record)async{
-      await DatabaseHelper.updateRecord(record);
+      await DatabaseHelper.updateRecord(record,context);
   }
   //重複チェックよう関数
   static Future<bool> _checkDuplicate(String date) async {
@@ -682,15 +683,15 @@ class DatabaseHelper {
     }
   }
 
-  static Future<void> updateRecord(Map<String, dynamic> record) async{
+  static Future<void> updateRecord(Map<String, dynamic> record,context) async{
     final db = await DatabaseHelper.getDatabaseInstance();
     Map<String, dynamic> updateValues= {};
     const action = "update";
 
-    if (record['check_in'] != 'N/A' && record['flagInOut']=="in"){
+    if (record['check_in'] != L10n.of(context)!.unregistered && record['flagInOut']=="in"){
       updateValues['check_in'] = record['check_in'];
     }
-    if (record['check_out'] != 'N/A' && record['flagInOut']=="out"){
+    if (record['check_out'] != L10n.of(context)!.unregistered && record['flagInOut']=="out"){
       updateValues['check_out'] = record['check_out'];
     }
     if ((record['free'] ?? "").isNotEmpty){
@@ -758,9 +759,9 @@ class DatabaseHelper {
 }
 //ロジック
 class AttendanceLogic {
-  static String _timeOfDayToString(TimeOfDay? time){
+  static String _timeOfDayToString(TimeOfDay? time,context){
     if (time == null) {
-      return 'N/A';
+      return L10n.of(context)!.unregistered;//未登録
     }
     return '${time.hour.toString().padLeft(2,'0')}:${time.minute.toString().padLeft(2, '0')}';
   }
@@ -771,14 +772,15 @@ class AttendanceLogic {
     flagInOut,
     overtimeReason,
     DateTime? date,
+    context
   }) 
    
   { date ??= DateTime.now();
   
     return {
       "date": intl.DateFormat('y-MM-dd').format(date),
-      "check_in":_timeOfDayToString(checkInTime),
-      "check_out":_timeOfDayToString(checkOutTime),
+      "check_in":_timeOfDayToString(checkInTime,context),
+      "check_out":_timeOfDayToString(checkOutTime,context),
       "flagInOut":flagInOut,
       "free":free,
       "overtime_reason":overtimeReason,
@@ -825,6 +827,19 @@ class AttendanceLogic {
       whereArgs: [1],
       orderBy: 'order_index ASC',
     );
+  }
+  static Future<Map<String, dynamic>?> todayRecords() async {
+    final db = await DatabaseHelper.getDatabaseInstance();
+    final today = intl.DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final List<Map<String,dynamic>> result =  await db.query(
+      'attendance_table',
+      where:'date = ?',
+      whereArgs: [today],
+    );
+    if (result.isNotEmpty) {
+      return result.first;
+    }
+    return null;
   }
   static Future<bool> checkOvertimeReason(String inputtxt) async {
     final db = await DatabaseHelper.getDatabaseInstance();
@@ -930,6 +945,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
       _updateDateTime();
     
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+    });
     
   }
 
@@ -1027,8 +1045,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final usableHeight = screenHeight - statusBarHeight - navigationBarHeight - appBarHeight;
     
-    //Set<int> overtimeReason = {};
+    double? containerHeight = usableHeight -450 >= 250 ? 250 : usableHeight -450;
+    
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title:  Row(children:[
           const Icon(Icons.cases_outlined),
@@ -1049,28 +1069,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height:5),
                   Padding(padding: const EdgeInsets.symmetric(horizontal:5),
                     child:Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: selectedTime != null
+                      ? MainAxisAlignment.spaceBetween
+                      : MainAxisAlignment.end,
                     children:[
+                if (selectedTime != null)
                   ElevatedButton(
                     onPressed: () async {
                         selectedTime = null;
                         _updateDateTime();
-                        
                     } ,
                     style: ElevatedButton.styleFrom(
-                      side: BorderSide(
-                        width:1.5,
-                        color:selectedTime != null
-                        ? Colors.grey
-                        : Theme.of(context).brightness == Brightness.dark ? Colors.grey :const Color.fromARGB(255,150,150,200) ,
+                      side: const BorderSide(
+                        width:1,
+                        color: Colors.grey,
                       ),
-                      backgroundColor: selectedTime != null
-                      ? null
-                      : Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),
+                      backgroundColor:  null,
                     ),
                     child: Text(
                        L10n.of(context)!.now,  //今
-                        style: TextStyle(fontSize: 25,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null )
+                        style: TextStyle(fontSize: 18,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null )
                     ),
                   ),
                   ElevatedButton(
@@ -1086,18 +1104,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     } ,
                     style: ElevatedButton.styleFrom(
                       side: BorderSide(
-                        width:1.5,
-                        color:selectedTime != null
-                        ? Theme.of(context).brightness == Brightness.dark ? Colors.grey :const Color.fromARGB(255,150,150,200) 
-                        : Colors.grey,
+                        width:1,
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.grey :const Color.fromARGB(255,150,150,200) 
+                        
                       ),
-                      backgroundColor: selectedTime == null
-                      ? null
-                      : Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),
+                      backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),
                       
                     ),
                     child:Text(L10n.of(context)!.time_adjusment,  //時刻調整
-                      style: TextStyle(fontSize:25,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),
+                      style: TextStyle(fontSize:18,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),
                     ),
                   ),
                   ],
@@ -1185,7 +1200,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Padding(padding: const EdgeInsets.symmetric(horizontal:20),
               child:
               Row (
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   
                   ElevatedButton(
@@ -1206,12 +1221,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? null
                       : Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),
                     ),
-                    child: Text(L10n.of(context)!.free, //自由記述
+                    child: 
+                      Text(L10n.of(context)!.free, //自由記述
                       style: TextStyle(fontSize:25,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),
-                            
-                    ),
+                      ),                                   
                   ),
-                  
+                  const SizedBox(width:10),
+                  SizedBox(width:MediaQuery.of(context).size.width * 0.5,
+                  child:
+                  Text(free ?? ""),
+                  ),
                 ],
               ),
               ),
@@ -1234,7 +1253,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return Container(
               width: MediaQuery.of(context).size.width * 0.85,
-              height: usableHeight -450 >= 250 ? 250 : usableHeight -450,
+              height: containerHeight,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey),
                 borderRadius: BorderRadius.circular(8),
@@ -1299,11 +1318,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),//gridviewbuilder
               ),//singlechildscrollview
             );//container
-              },//builder?
-            ),//futurebuilder
+            },  //},builder?
+            ),//),futurebuilder
             const SizedBox(height:15),
-                  
-                  Row (
+
+            FutureBuilder<Map<String, dynamic>?>(
+              future: AttendanceLogic.todayRecords(),// データ取得
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                final records = snapshot.data ?? {};
+                final record = records;
+                  return Row (
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       
@@ -1333,13 +1363,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,185,188,195) : const Color.fromARGB(255, 225, 238, 255),),
                         child: Row(children:[
                           Icon(Icons.login,color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,80,80,100) :const Color.fromARGB(255,80,80,100)),
+                          const SizedBox(width:10),
+                          Column(children:[
+                          if (record['check_in'] != null && record['check_in'] != L10n.of(context)!.unregistered && record['check_in'] != "N/A")
+                            Text(record['check_in']),
                           Text(L10n.of(context)!.atwork,  //出勤
-                        style:TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 35 : 20,color:const Color.fromARGB(255,80,80,100)),
-                        ),
-                        
+                            style:TextStyle(
+                              fontSize:Localizations.localeOf(context).languageCode == 'ja' 
+                                ? record['check_in'] != null && record['check_in'] != L10n.of(context)!.unregistered && record['check_in'] != "N/A" ? 20 : 35 
+                                : 20,color:const Color.fromARGB(255,80,80,100)),
+                          ),
+                          
+
+                          ],),
                         ],),
                       ),
-                      
+              
                       OutlinedButton(
                         onPressed:()async{
                           if (selectedTime != null){
@@ -1364,17 +1403,25 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: OutlinedButton.styleFrom(
                           backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,35,30,30) :const Color.fromARGB(255, 255, 242, 232),),
                         child: Row(children:[
+                          Column(children:[
+                          if (record['check_out'] != null && record['check_out'] != L10n.of(context)!.unregistered && record['check_out'] != "N/A")
+                            Text(record['check_out']),
                           Text(L10n.of(context)!.leavingwork,  //退勤
-                        style:TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 35 : 20,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :const Color.fromARGB(255,80,80,100)),
+                            style:TextStyle(
+                              fontSize:Localizations.localeOf(context).languageCode == 'ja' 
+                                ? record['check_out'] != null && record['check_out'] != L10n.of(context)!.unregistered && record['check_out'] != "N/A" ? 20 : 35  
+                                : 20,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :const Color.fromARGB(255,80,80,100)),
                         ),
+                        ],),
+                          const SizedBox(width:10),
                           Icon(Icons.logout,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :const Color.fromARGB(255,80,80,100)),
                         ],),
                       ),
                       
                     ],
-                  ),
-                  
-                const SizedBox(height:40),
+                  );
+              },),
+                const SizedBox(height:30),
               Row(
                 mainAxisAlignment:MainAxisAlignment.center,
                 children: [
@@ -2270,7 +2317,7 @@ class AttendanceListScreen extends StatefulWidget {
   State<AttendanceListScreen> createState() => _AttendanceListScreenState();
 }
 
-class _AttendanceListScreenState extends State<AttendanceListScreen> {
+class _AttendanceListScreenState extends State<AttendanceListScreen> with AutomaticKeepAliveClientMixin{
   int? selectedIndex;
   ScrollController _scrollController = ScrollController();
   double? _currentScrollPosition;
@@ -2278,9 +2325,14 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
   DateTime fetchMonth = DateTime.now();
   
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState(){
-    super.initState();    
+    super.initState();  
+    _scrollController = ScrollController();  
   }
+
 
   void _navigateToCalendar(BuildContext context){
     Navigator.push(
@@ -2309,12 +2361,13 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     String dateFormatYm = L10n.of(context)!.date_format_ym ;
     //DateTime now = DateTime.now();
     List<Map<String,dynamic>> records = [];
     String _stateValue = 'state';
     String formatDateString(String? date){
-      if (date== null) return 'N/A';
+      if (date== null) return L10n.of(context)!.unregistered;
       final DateTime parsedDate = DateTime.parse(date);
       return intl.DateFormat('y-M-dd(EEE)').format(parsedDate);
     }
@@ -2329,8 +2382,6 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
         //backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Row(
           children:[
-            const Icon(Icons.list),
-            const SizedBox(width: 15),
             Text(L10n.of(context)!.monthlist), //月別一覧
         ],),
         actions: [
@@ -2428,26 +2479,34 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
               int timeOut = 0;
               for (int i = 0; i< records.length; i++){                
                 if (onTimeIn != null && records[i]['check_in']!=null){
-                  TimeOfDay checkInTOD =  stringToTimeOfDay(records[i]['check_in']);
-                  int onTimeInMinute = onTimeIn!.hour * 60 + onTimeIn!.minute;
-                  int checkInMinute = checkInTOD!.hour * 60 + checkInTOD!.minute;
-                  if (onTimeInMinute > checkInMinute){
-                    timeIn = timeIn + onTimeInMinute - checkInMinute;
+                  if (records[i]['check_in'] == L10n.of(context)!.unregistered || records[i]['check_in'] == "N/A"){
+                    
+                  } else {
+                    TimeOfDay checkInTOD =  stringToTimeOfDay(records[i]['check_in']);
+                    int onTimeInMinute = onTimeIn!.hour * 60 + onTimeIn!.minute;
+                    int checkInMinute = checkInTOD!.hour * 60 + checkInTOD!.minute;
+                    if (onTimeInMinute > checkInMinute){
+                      timeIn = timeIn + onTimeInMinute - checkInMinute;
+                    }
                   }
                 }
                 if (onTimeOut != null && records[i]['check_out']!=null){
-                  TimeOfDay checkOutTOD =  stringToTimeOfDay(records[i]['check_out']);
-                  int onTimeOutMinute = onTimeOut!.hour * 60 + onTimeOut!.minute;
-                  int checkOutMinute = checkOutTOD!.hour * 60 + checkOutTOD!.minute;
-                  if (onTimeOutMinute < checkOutMinute){
-                    timeOut = timeOut - onTimeOutMinute + checkOutMinute;
+                  if (records[i]['check_out'] == L10n.of(context)!.unregistered || records[i]['check_out'] == "N/A"){
+                    
+                  } else {
+                    TimeOfDay checkOutTOD =  stringToTimeOfDay(records[i]['check_out']);
+                    int onTimeOutMinute = onTimeOut!.hour * 60 + onTimeOut!.minute;
+                    int checkOutMinute = checkOutTOD!.hour * 60 + checkOutTOD!.minute;
+                    if (onTimeOutMinute < checkOutMinute){
+                      timeOut = timeOut - onTimeOutMinute + checkOutMinute;
+                    }
                   }
                 }
               }
               int totalOvertime = timeIn + timeOut;
               TimeOfDay totalOvertimeTOD = TimeOfDay(hour: totalOvertime ~/60,minute:totalOvertime % 60);
               String totalOvertimeTODhmString = "${totalOvertimeTOD.hour}h ${totalOvertimeTOD.minute}m"; 
-              if (prefsData['onTimeIn'] == null && prefsData['onTimeOut'] == null){totalOvertimeTODhmString = L10n.of(context)!.notset;}
+              if (prefsData['onTimeIn'] == null && prefsData['onTimeOut'] == null){totalOvertimeTODhmString = L10n.of(context)!.notsetontime;}
 
               return ListView.builder(
                 controller: _scrollController,
@@ -2467,26 +2526,28 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                   }
 
                   final record = records[index-1];
-                  final formatDate = formatDateString(record['date']);
+                  final formatDate = formatDateString(record['date']).replaceAll("-","/");
 
                   
-                  if (record['check_in'] != null){
+                  if (record['check_in'] != null && (record['check_in'] != L10n.of(context)!.unregistered && record['check_in'] != "N/A") ){
+
                     checkIn = stringToTimeOfDay(record['check_in']);
                   }
-                  if (record['check_out'] != null){
+                  if (record['check_out'] != null && (record['check_out'] != L10n.of(context)!.unregistered && record['check_out'] != "N/A")){
+                    
                     checkOut = stringToTimeOfDay(record['check_out']);
                   }
 
                   int overtimePre = 0 ;
                   int overtimePost = 0 ;
-                  if(onTimeIn != null && record['check_in'] != null){
+                  if(onTimeIn != null && (record['check_in'] != null && (record['check_in'] != L10n.of(context)!.unregistered ||record['check_in'] != "N/A") )){
                     int onTimeMin1 = onTimeIn!.hour * 60 + onTimeIn!.minute;
                     int checkInMin = checkIn!.hour * 60 + checkIn!.minute;
                     if (onTimeMin1 > checkInMin){
                       overtimePre = onTimeMin1 - checkInMin;
                     }                
                   }
-                  if(onTimeOut != null && record['check_out'] != null){
+                  if(onTimeOut != null && (record['check_in'] != null && (record['check_out'] != L10n.of(context)!.unregistered ||record['check_out'] != "N/A")  )){
                     int onTimeMin2 = onTimeOut!.hour * 60 + onTimeOut!.minute;
                     int checkOutMin = checkOut!.hour * 60 + checkOut!.minute;
                     if (onTimeMin2 < checkOutMin){
@@ -2495,12 +2556,6 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                   }
                   int overtime = overtimePre + overtimePost ;
                   TimeOfDay overtimeTimeOfDay = TimeOfDay(hour:overtime ~/ 60,minute:overtime % 60);
-                  print('record:$record');
-                  print('onTimeIn:$onTimeIn');
-                  print('overtimePre:$overtimePre');
-                  print('overtimePost:$overtimePost');
-                  print('overtime:$overtime');
-                  print('overtimeTimeOfDay:$overtimeTimeOfDay');
 
                   return GestureDetector(
                     onTap: (){
@@ -2508,7 +2563,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                       setState((){
                         selectedIndex = index-1;
                       });
-                      Future.delayed(const Duration(milliseconds:50),(){
+                      Future.delayed(const Duration(milliseconds:100),(){
                         _scrollController.jumpTo(_currentScrollPosition!);
                       });
                       
@@ -2538,16 +2593,16 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> {
                         children: [
                           Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,
                             children:[
-                            Text('Date: $formatDate',
+                            Text('${L10n.of(context)!.date}: $formatDate',
                               style:const TextStyle(fontWeight:FontWeight.bold,)),
                             Text(overtime != 0 ? '${L10n.of(context)!.overtime}: ${overtimeTimeOfDay.hour}h${overtimeTimeOfDay.minute}m' : "",
                               style:const TextStyle(fontSize:12)),
                             const SizedBox.shrink(),
                           ],),
                           Row(children:[
-                            Text('${L10n.of(context)!.attendance_time} : ${record['check_in'] ?? 'N/A'}'),
+                            Text('${L10n.of(context)!.attendance_time} : ${record['check_in'] ?? L10n.of(context)!.unregistered}'),
                             const SizedBox(width:25),
-                            Text('${L10n.of(context)!.leavework_time} : ${record['check_out'] ?? 'N/A'}'),
+                            Text('${L10n.of(context)!.leavework_time} : ${record['check_out'] ?? L10n.of(context)!.unregistered}'),
                           ]),
                           Text('${L10n.of(context)!.reason} : ${record['overtime_reasons'] ?? ''}'),
                           Text('${L10n.of(context)!.remarks} : ${record['free'] ?? ''}'),
@@ -2642,12 +2697,7 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
   Set<int> selectedIndices = <int>{};
   String? free = item['free'];
   DateTime editDay = DateTime.parse(item['date']);
-  if (item['check_in'] == "N/A"){
-    checkInTime = const TimeOfDay(hour:0,minute:0);
-  }
-  if (item['check_out'] == "N/A"){
-    checkOutTime = const TimeOfDay(hour:0,minute:0);
-  }
+
   final DateTime displayDate = DateTime.parse(item['date']);
 
   Future<void> initialIndices(Map<String,dynamic> item)async{
@@ -2687,7 +2737,9 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
                 setState((){ checkInTime = time; });          
               }
             },
-            child: Text(checkInTime != null ? "${L10n.of(context)!.attendance_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime!, alwaysUse24HourFormat: true)}" : '${L10n.of(context)!.attendance_time} : ${item['check_in']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+            child: Text(checkInTime != null 
+              ? "${L10n.of(context)!.attendance_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime!, alwaysUse24HourFormat: true)}" 
+              : '${L10n.of(context)!.attendance_time} : ${item['check_in']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
           ),
           TextButton(
             style: TextButton.styleFrom(
@@ -2701,7 +2753,9 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
                 setState((){ checkOutTime = time; });
               }
             },
-            child: Text(checkOutTime != null ? "${L10n.of(context)!.leavework_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime!, alwaysUse24HourFormat: true)}" : '${L10n.of(context)!.leavework_time} : ${item['check_out']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+            child: Text(checkOutTime != null 
+              ? "${L10n.of(context)!.leavework_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime!, alwaysUse24HourFormat: true)}" 
+              : '${L10n.of(context)!.leavework_time} : ${item['check_out']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
           ),
           Align(
                   alignment:Alignment.centerLeft,
@@ -2821,8 +2875,12 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
           ),
           TextButton(
             onPressed:()async {
-              checkInTime ??= stringToTimeOfDay(item['check_in']);            
-              checkOutTime ??= stringToTimeOfDay(item['check_out']);
+              checkInTime ??= (item['check_in'] != L10n.of(context)!.unregistered && item['check_in'] != "N/A")
+                ? stringToTimeOfDay(item['check_in'])
+                : null;            
+              checkOutTime ??= (item['check_out'] != L10n.of(context)!.unregistered && item['check_in'] != "N/A")
+                ? stringToTimeOfDay(item['check_out'])
+                : null;      
               
               final overReason = selectedIndices.toList();
               final overtimeReason = overReason.join(',');
@@ -3297,13 +3355,13 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
 
           int overtimeInMin =0 ;
           int overtimeOutMin = 0;
-          if (record['check_in'] != null){
+          if (record['check_in'] != null && (record['check_in'] != L10n.of(context)!.unregistered && record['check_in'] != "N/A") ){
             TimeOfDay? checkInTOD = stringToTimeOfDay(record['check_in']);
             int checkInMin = checkInTOD.hour *60 + checkInTOD.minute;
             if (onTimeInMin > checkInMin){overtimeInMin = onTimeInMin - checkInMin;}
           }
           if (prefData['onTimeIn'] == null){overtimeInMin = 0;}
-          if (record['check_out'] != null){
+          if (record['check_out'] != null && (record['check_out'] != L10n.of(context)!.unregistered && record['check_out'] != "N/A") ){
             TimeOfDay? checkOutTOD = stringToTimeOfDay(record['check_out']);
             int checkOutMin = checkOutTOD.hour *60 + checkOutTOD.minute;
             if (onTimeOutMin < checkOutMin){overtimeOutMin = checkOutMin - onTimeOutMin ;}
@@ -3313,9 +3371,9 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
           TimeOfDay overtimeTOD = TimeOfDay(hour:overtime ~/ 60,minute:overtime % 60);
           String overtimeTODString = "\n ${L10n.of(context)!.overtime} : ${overtimeTOD.hour}h ${overtimeTOD.minute}m";
           if (prefData['onTimeOut'] == null && prefData['onTimeIn'] == null){overtimeTODString = "";}
-          String checkIn = record['check_in'] ?? 'N/A';
+          String checkIn = record['check_in'] ?? L10n.of(context)!.unregistered;
           checkIn = '${L10n.of(context)!.inwork} : $checkIn';
-          String checkOut = record['check_out'] ?? 'N/A';
+          String checkOut = record['check_out'] ?? L10n.of(context)!.unregistered;
           checkOut = '${L10n.of(context)!.outwork} : $checkOut';
           String overtimeReason = record['overtime_reasons'] ?? '';
           String free = record['free'] ?? '';
@@ -3348,8 +3406,6 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
         appBar: AppBar(
           title: Row(
             children:[
-              const Icon(Icons.list),
-              const SizedBox(width: 15),
               Text(L10n.of(context)!.monthlist), //月別一覧
           ],),
           actions: [
@@ -3572,12 +3628,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
   Set<int> selectedIndices = <int>{};
   String? free = item['free'];
   DateTime editDay = DateTime.parse(item['date']);
-  if (item['check_in'] == "N/A"){
-    checkInTime = const TimeOfDay(hour:0,minute:0);
-  }
-  if (item['check_out'] == "N/A"){
-    checkOutTime = const TimeOfDay(hour:0,minute:0);
-  }
+ 
   final DateTime displayDate = DateTime.parse(item['date']);
 
   Future<void> initialIndices(Map<String,dynamic> item)async{
@@ -3751,8 +3802,12 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
           ),
           TextButton(
             onPressed:()async {
-              checkInTime ??= stringToTimeOfDay(item['check_in']);            
-              checkOutTime ??= stringToTimeOfDay(item['check_out']);
+              checkInTime ??= (item['check_in'] != L10n.of(context)!.unregistered && item['check_in'] != "N/A")
+                ? stringToTimeOfDay(item['check_in'])
+                : null;            
+              checkOutTime ??= (item['check_out'] != L10n.of(context)!.unregistered && item['check_out'] != "N/A") 
+                ? stringToTimeOfDay(item['check_out'])
+                : null; 
               
               final overReason = selectedIndices.toList();
               final overtimeReason = overReason.join(',');

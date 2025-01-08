@@ -32,7 +32,7 @@ android {
         applicationId = "tech.migsfactory.attendtap"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 5
+        versionCode = 6
         versionName = "1.1.0"
         buildConfigField("String", "ADMOB_APP_ID", "\"${localProperties["ADMOB_APP_ID"]}\"")
         resValue "string", "ADMOB_APP_ID", "\"${localProperties['ADMOB_APP_ID']}\""
