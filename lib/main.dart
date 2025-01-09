@@ -1818,13 +1818,17 @@ class _ConfigScreenState extends State<ConfigScreen>{
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final statusBarHeight = MediaQuery.of(context).padding.top;
     final navigationBarHeight = MediaQuery.of(context).padding.bottom;
     final appBarHeight = AppBar().preferredSize.height;
 
     final usableHeight = screenHeight - statusBarHeight - navigationBarHeight - appBarHeight;
+    double itemListHeight = usableHeight -450 >= 250 ? 250 : usableHeight -450;
+    double configHeight = usableHeight - 260 - itemListHeight;
 
+    ScrollController _scrollController = ScrollController();
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
@@ -1837,8 +1841,10 @@ class _ConfigScreenState extends State<ConfigScreen>{
         ),
       ),
       body:
-      Stack(children:[
+
+      Stack(
         
+        children:[
         FutureBuilder<bool>(
           future: isPrivacyOptionsRequired(),
           builder: (context,snapshot){
@@ -1856,7 +1862,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
             return const SizedBox.shrink();
         },),
 
-        Column(children:[
+        
 
         if (_bannerAd != null && _isLoaded)
           Container( 
@@ -1870,13 +1876,32 @@ class _ConfigScreenState extends State<ConfigScreen>{
         ),
         
         
-        const SizedBox(height:10),
-        
 
+        Positioned(
+          top: _bannerAd != null ? _bannerAd!.size.height.toDouble()+10 : 60,
+          child:
+        Container(
+          //color:Colors.grey,
+          height:configHeight,
+          width:screenWidth,
+          child:Scrollbar(
+            thickness: 5,
+            thumbVisibility:true,
+            controller: _scrollController,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              physics: ClampingScrollPhysics(),
+              child:NotificationListener(
+              onNotification:(notification){if(notification is ScrollUpdateNotification){}return true;},
+              child:
+          
+        Column(children:[
+        
         Row( 
           children: [
             const SizedBox(width:20),
             Container(
+              
               width:105,
               child:
             Column( crossAxisAlignment:CrossAxisAlignment.center,
@@ -1889,6 +1914,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
               Text(L10n.of(context)!.language), //言語
               const SizedBox(height:28),
               Text(L10n.of(context)!.ontime),//定時設定
+             
 
               
             ]),),
@@ -1902,11 +1928,11 @@ class _ConfigScreenState extends State<ConfigScreen>{
               Text("：  "),
               SizedBox(height:28),
               Text("："),
+              
 
             ]),
             Column(crossAxisAlignment:CrossAxisAlignment.start,
               children:[
-              //const SizedBox(width:20),
               DropdownButton<String>(
                 value: _selectedTheme,
                 onChanged: (String? newValue){
@@ -1971,6 +1997,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                   }).toList(),
               ),
               const SizedBox(height:2),
+
               FutureBuilder<Map<String,dynamic>>(future:fetchOnTimeInOut(),builder:(context,snapshot){
                     if(snapshot.connectionState == ConnectionState.waiting){
                       return const CircularProgressIndicator();
@@ -2025,21 +2052,27 @@ class _ConfigScreenState extends State<ConfigScreen>{
             ]),
           ]),
            
-        ]),Column(mainAxisAlignment:MainAxisAlignment.end,
+       
+        ]),
+        ),
+        ),),
+        ),
+
+        ),
+        
+
+        Column(mainAxisAlignment:MainAxisAlignment.end,
           children:[
-            
-            //const Spacer(),
             
             Text(L10n.of(context)!.itemlist,  //項目リスト
                       style: const TextStyle(fontSize:20),
                       ),
-            //const SizedBox(height:5),
             Row(children:[  
               const SizedBox(width:20),
               Container(
                 
                 width: MediaQuery.of(context).size.width *0.8,
-                height: usableHeight -450 >= 250 ? 250 : usableHeight -450,
+                height: itemListHeight ,
                 decoration: BoxDecoration(
                   border: Border.all(color:Colors.grey),
                   borderRadius: BorderRadius.circular(8),
@@ -2162,7 +2195,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
 
           ],
         ),
-        const SizedBox(height:10),
+        const SizedBox(height:8),
 
         Row( mainAxisAlignment:MainAxisAlignment.center,
           children:[
@@ -2540,14 +2573,14 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
 
                   int overtimePre = 0 ;
                   int overtimePost = 0 ;
-                  if(onTimeIn != null && (record['check_in'] != null && (record['check_in'] != L10n.of(context)!.unregistered ||record['check_in'] != "N/A") )){
+                  if(onTimeIn != null && (record['check_in'] != null && (record['check_in'] != L10n.of(context)!.unregistered && record['check_in'] != "N/A") )){
                     int onTimeMin1 = onTimeIn!.hour * 60 + onTimeIn!.minute;
                     int checkInMin = checkIn!.hour * 60 + checkIn!.minute;
                     if (onTimeMin1 > checkInMin){
                       overtimePre = onTimeMin1 - checkInMin;
                     }                
                   }
-                  if(onTimeOut != null && (record['check_in'] != null && (record['check_out'] != L10n.of(context)!.unregistered ||record['check_out'] != "N/A")  )){
+                  if(onTimeOut != null && (record['check_out'] != null && (record['check_out'] != L10n.of(context)!.unregistered && record['check_out'] != "N/A")  )){
                     int onTimeMin2 = onTimeOut!.hour * 60 + onTimeOut!.minute;
                     int checkOutMin = checkOut!.hour * 60 + checkOut!.minute;
                     if (onTimeMin2 < checkOutMin){
