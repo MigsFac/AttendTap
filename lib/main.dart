@@ -9,16 +9,16 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:month_picker_dialog/month_picker_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_gen/gen_l10n/l10n.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:async_preferences/async_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:restart_app/restart_app.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-//import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:upgrader/upgrader.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:dropdown_button2/dropdown_button2.dart';
 
 
 void main() async {
@@ -29,16 +29,28 @@ void main() async {
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]).then((_){
-    runApp(MyApp(
-    navigatorObservers: [MyNavigatorObserver()],
-  ));
+    runApp(
+      ScreenUtilInit(
+        designSize:Size(360,690),
+        builder:(context,child)=>MyApp(
+          navigatorObservers: [MyNavigatorObserver()],
+        ),
+      ),
+    );
   });
 
-  Future.wait([
+  //final trackingStatus = await AppTrackingTransparency.requestTrackingAuthorization(); 
+  //debugPrint("ATTrequest:$trackingStatus,at ${DateTime.now()}}");
+
+  //if (trackingStatus == TrackingStatus.authorized){
+    await MobileAds.instance.initialize();
+  //  debugPrint("Ad SDK initialized after ATT: ${DateTime.now()}");
+  //}
+
+  await Future.wait([
   dotenv.load(fileName: ".env"),
-  AppTrackingTransparency.requestTrackingAuthorization(),
-  MobileAds.instance.initialize(),
   ]);
+  
   time.stop();  //計測１終了
   debugPrint('main time:${time.elapsedMilliseconds} ms');
 
@@ -63,6 +75,8 @@ class _MyAppState extends State<MyApp> {
   Locale _locale =  WidgetsBinding.instance.platformDispatcher.locale;
   TimeOfDay _onTimeIn = const TimeOfDay(hour:0,minute:0);
   TimeOfDay _onTimeOut = const TimeOfDay(hour:0,minute:0);
+
+
 
   Future<void> _loadFont() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -240,27 +254,13 @@ class _MyAppState extends State<MyApp> {
         );
     }
   }
-  Future<void> checkAppVersion() async {
-    final prefs = await SharedPreferences.getInstance();
-    PackageInfo packageInfo = await PackageInfo.fromPlatform();
-    String currentVersion = packageInfo.version;
-    String? storedVersion = prefs.getString('app_version');
-    
-    if (storedVersion == null || storedVersion != currentVersion){
-        //新しいバージョンの処理
-      prefs.setString('app_version', currentVersion);
-        //必要な処理
-    }
-  }
 
 
   @override
   void initState(){
     super.initState();
     initConsent();
-    checkAppVersion();
     _loadFont();
-
   }
 
   @override
@@ -319,7 +319,7 @@ class _MyAppState extends State<MyApp> {
           onTimeOut: _onTimeOut
           ),
         '/AttendanceListCalendar':(context) =>  AttendanceListScreenCalendar(initialDate:DateTime.now()),
-      },
+      },      
     );
   }
 }
@@ -342,23 +342,29 @@ class MyNavigatorObserver extends NavigatorObserver {
 //functionクラス-インフォメーションモーダル
 class Functions {
   void informationModal(String title,String caption,BuildContext context,){ 
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
     showDialog(
       context: context,
       builder: (BuildContext context){
         return AlertDialog(
-          title:  Text(title),
-          content: Text(caption),
+          
+          title:  Text(title,style:TextStyle(fontSize:20.sp)),
+          content: Container(
+            padding:EdgeInsets.all(15.sp),
+            child:Text(caption,style:TextStyle(fontSize:15.sp)),),
           actions: <Widget>[
             TextButton(
               onPressed:() {
                 Navigator.of(context).pop();                   
               },
-              child:const Text('OK'),
+              child:Text('OK',style:TextStyle(fontSize:15.sp)),
             ),
           ],
         );
       },
     );
+  });
   }
   Future<Map<String,dynamic>> getSharedPref()async{
     final prefs = await SharedPreferences.getInstance();
@@ -394,13 +400,14 @@ class AttendanceUtils {
   String? freeRecord;
   bool isDuplicate = await _checkDuplicate(record["date"]);
   freeRecord = await duplicateFree(record["date"]);
+  print("isDuplicate:$isDuplicate");
   if (isDuplicate) {
     if(flagInOut=="inOut"){
       var functions=Functions();
       functions.informationModal(l10n.registered,l10n.registered_caption,context);//登録済み
       return;
     }
-    final duplicateCheck =  await duplicateInOutByDate(record["date"]);
+    final duplicateCheck =  await duplicateInOutByDate(record["date"],context);
     if ((flagInOut == 'in' && duplicateCheck?['check_in'] !=L10n.of(context)!.unregistered ) || (flagInOut == 'out' && duplicateCheck?['check_out'] !=L10n.of(context)!.unregistered )){
       String flagInOutString = "";
       if(flagInOut == 'in'){
@@ -412,21 +419,24 @@ class AttendanceUtils {
         context:context,
         barrierDismissible: false,
         builder:(_) => AlertDialog(
-          title:Text(l10n.duplicate),//重複確認
-          content: Text(
+          title:Text(l10n.duplicate,style:TextStyle(fontSize:20.sp)),//重複確認
+          content: Container(
+            padding:EdgeInsets.all(15.sp),
+            child:Text(
             duplicateCheck != null
             ? "${l10n.registered_caption} \n${L10n.of(context)!.attendance_time}:${duplicateCheck['check_in']}　${L10n.of(context)!.leavework_time}:${duplicateCheck['check_out']}\n\n'$flagInOutString' ${l10n.overwrite_check}"//上書きしますか。
             : l10n.notfound //データが見つかりません。
-            ),
+            ,style:TextStyle(fontSize:15.sp)),),
           actions: [
             TextButton(
-              child: const Text("Cancel"),
+              child: Text("Cancel",style:TextStyle(fontSize:15.sp)),
               onPressed: () {
                 Navigator.of(context).pop();
               } ,
             ),
+            SizedBox(width:8.sp),
             TextButton(
-              child: const Text("OK"),
+              child: Text("OK",style:TextStyle(fontSize:15.sp)),
               onPressed: () async {
                 var functions = Functions();
                 if ((freeRecord?.isNotEmpty ?? false) && (free?.isNotEmpty ?? false) ){
@@ -434,6 +444,11 @@ class AttendanceUtils {
                   if (freeCheck == false){
                     record['free'] = null;                    
                   }
+                }
+                if (flagInOut == "in"){
+                  record.remove('check_out');
+                } else if (flagInOut == "out"){
+                  record.remove('check_in');
                 }
                 _updateRecord(context,record);
                 Navigator.of(context).pop();
@@ -469,6 +484,11 @@ class AttendanceUtils {
         }
     }
   } else{
+    if (flagInOut == "in"){
+      record.remove('check_out');
+    } else if (flagInOut == "out"){
+      record.remove('check_in');
+    }
     record.remove('flagInOut');
     List<int> recordOutOTR =[];
     if (record['overtime_reason'].isNotEmpty){
@@ -511,7 +531,7 @@ class AttendanceUtils {
     );
     return result.isNotEmpty;
   }
-  static Future<Map<String,String>?> duplicateInOutByDate(String date) async {
+  static Future<Map<String,String>?> duplicateInOutByDate(String date,context) async {
     final db = await DatabaseHelper.getDatabaseInstance();
     final duplicateInOut = await db.query(
       'attendance_table',
@@ -519,10 +539,11 @@ class AttendanceUtils {
       where: 'date = ?',
       whereArgs: [date],
     );
+    print("duplicateInOut:$duplicateInOut");
     if (duplicateInOut.isNotEmpty){
       return{
-        'check_in':duplicateInOut[0]['check_in'] as String,
-        'check_out':duplicateInOut[0]['check_out'] as String,
+        'check_in': duplicateInOut[0]['check_in'] != null ? duplicateInOut[0]['check_in'] as String : L10n.of(context)!.unregistered,
+        'check_out':duplicateInOut[0]['check_out'] != null ? duplicateInOut[0]['check_out'] as String : L10n.of(context)!.unregistered,
       };
     }
     return null;
@@ -982,15 +1003,38 @@ class _HomeScreenState extends State<HomeScreen> {
       context:context,
       initialTime: TimeOfDay.fromDateTime(DateTime.now()),
       builder: (context, child) {
-        return Localizations.override(
-          context: context,
-          locale:const Locale('en','US'),
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        return Theme(     
+          data: ThemeData.light().copyWith(
+            timePickerTheme:const TimePickerThemeData(
+              dayPeriodColor:Color.fromARGB(105,50,50,250),
+             ),
+            colorScheme:const ColorScheme.light(
+              primary:Color.fromARGB(255,120,120,230),
+              
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                textStyle: TextStyle(fontSize:13.sp),
+                )
+              ),
+            textTheme: TextTheme(bodyMedium:TextStyle(fontSize:12.sp,color:Colors.black),
+            ),
+          ),
+              
+          child:Localizations.override(
+            context: context,
+            locale: const Locale('en','US'), 
+          child:
+          MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false,
+              size:Size(MediaQuery.of(context).size.width*0.7,
+                MediaQuery.of(context).size.height * 0.7),),
             child: child!,
+          ),
           ),
         );
       },
+      helpText:L10n.of(context)!.selecttime,
       );      
     if (pickedDate != null){
       return pickedDate;
@@ -1006,28 +1050,30 @@ class _HomeScreenState extends State<HomeScreen> {
         return AlertDialog(
           title: Column(crossAxisAlignment: CrossAxisAlignment.start,
             children:[
-            Text(L10n.of(context)!.content_input,style:const TextStyle(fontSize:15,)), //内容を入力してください。
+            Text(L10n.of(context)!.content_input,style: TextStyle(fontSize:14.sp,)), //内容を入力してください。
             const SizedBox(height:2),
-            Text(L10n.of(context)!.twentychar,style:const TextStyle(fontSize:12,),), //(20文字以内)
+            Text(L10n.of(context)!.twentychar,style: TextStyle(fontSize:11.sp,),), //(20文字以内)
             ],),
-          content: TextField(
+          content: 
+          Container(margin:EdgeInsets.all(10.sp),child:
+          TextField(
             controller: _controller,
             decoration: InputDecoration(hintText: L10n.of(context)!.here),  //ここに入力
             maxLength:20,
-            
-          ),
+            style:TextStyle(fontSize:11.sp),
+          ),),
           actions: [
             TextButton(
               onPressed: (){
                   Navigator.of(context).pop(free);                 
               },
-              child: const Text('Cancel'),
+              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:11.sp)),
             ),
             TextButton(
               onPressed: ()async {
                 Navigator.of(context).pop((_controller.text).trim());
               },
-              child: const Text('OK'),
+              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:11.sp)),
             ),
           ],
         );
@@ -1041,7 +1087,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final screenHeight = MediaQuery.of(context).size.height;
     final statusBarHeight = MediaQuery.of(context).padding.top;
     final navigationBarHeight = MediaQuery.of(context).padding.bottom;
-    final appBarHeight = AppBar().preferredSize.height;
+    final appBarHeight = MediaQuery.of(context).size.height * 0.07;//AppBar().preferredSize.height;
 
     final usableHeight = screenHeight - statusBarHeight - navigationBarHeight - appBarHeight;
     
@@ -1049,25 +1095,33 @@ class _HomeScreenState extends State<HomeScreen> {
     
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        title:  Row(children:[
-          const Icon(Icons.cases_outlined),
-          const SizedBox(width:8),
-          Text(L10n.of(context)!.attendance_management,  //勤怠管理
-        style: TextStyle(fontSize: Localizations.localeOf(context).languageCode == 'ja' ? 25 : 20 ),
-        ),
-        ],),
-         
-      ),
+      appBar: 
+          AppBar(
+            title:  
+                Row(crossAxisAlignment:CrossAxisAlignment.center,
+              children:[
+              const Icon(Icons.cases_outlined),
+              const SizedBox(width:8),
+              
+                Text(L10n.of(context)!.attendance_management,  //勤怠管理
+                style: TextStyle(fontSize: Localizations.localeOf(context).languageCode == 'ja' ? 18.sp : 12.sp ),
+              ),
+              
+            ],),
+          ),
 
-      body: Stack(
+      body: 
+      UpgradeAlert(
+        
+        child:
+      Stack(
         children: [
           //左上
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height:5),
-                  Padding(padding: const EdgeInsets.symmetric(horizontal:5),
+                  SizedBox(height:5.sp),
+                  Padding(padding: EdgeInsets.symmetric(horizontal:5.sp),
                     child:Row(
                     mainAxisAlignment: selectedTime != null
                       ? MainAxisAlignment.spaceBetween
@@ -1088,7 +1142,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Text(
                        L10n.of(context)!.now,  //今
-                        style: TextStyle(fontSize: 18,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null )
+                        style: TextStyle(fontSize: 15.sp,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null )
                     ),
                   ),
                   ElevatedButton(
@@ -1112,7 +1166,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       
                     ),
                     child:Text(L10n.of(context)!.time_adjusment,  //時刻調整
-                      style: TextStyle(fontSize:18,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),
+                      style: TextStyle(fontSize:15.sp,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),
                     ),
                   ),
                   ],
@@ -1124,9 +1178,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     builder:(context,time,child){
                       String dateFormatString = L10n.of(context)!.date_format;
                   return Padding(
-                    padding: const EdgeInsets.all(10),
+                    padding: EdgeInsets.all(10.sp),
                     child: Text( intl.DateFormat(dateFormatString).format(currentYmdhms.value) ,  //y年M月d日
-                      style: const TextStyle(fontSize: 25, fontWeight:FontWeight.bold),
+                      style: TextStyle(fontSize: 24.sp, fontWeight:FontWeight.bold),
                     ),
                   );
                   },
@@ -1153,12 +1207,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(children:[
-                        const SizedBox(width:60),
+                        SizedBox(width:60.sp),
                         Text(
                         selectedTime != null
                           ? L10n.of(context)!.settime //設定時刻
                           : L10n.of(context)!.currenttime, //現在時刻
-                        style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 28 : 23),
+                        style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 26.sp : 22.sp),
                         ),
                       ],),
                       Row(  mainAxisAlignment:MainAxisAlignment.center,
@@ -1168,14 +1222,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         selectedTime != null
                           ? MaterialLocalizations.of(context).formatTimeOfDay(selectedTime!, alwaysUse24HourFormat: true) //設定時刻
                           : intl.DateFormat('H:mm:').format(currentYmdhms.value), //現在時刻
-                        style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 28 : 28),
+                        style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 26.sp : 27.sp),
                       
                       ) ,
                       Text(
                         selectedTime != null
                           ? ''
                           : intl.DateFormat('ss').format(currentYmdhms.value),
-                        style: const TextStyle(fontSize:23),
+                        style: TextStyle(fontSize:22.sp),
                       )
                       ],),
                     ],
@@ -1222,14 +1276,26 @@ class _HomeScreenState extends State<HomeScreen> {
                       : Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),
                     ),
                     child: 
-                      Text(L10n.of(context)!.free, //自由記述
-                      style: TextStyle(fontSize:25,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),
+                      Text(L10n.of(context)!.free, //メモ
+                      style: TextStyle(fontSize:22.sp,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),
                       ),                                   
                   ),
                   const SizedBox(width:10),
-                  SizedBox(width:MediaQuery.of(context).size.width * 0.5,
-                  child:
-                  Text(free ?? ""),
+                  Container(
+                    height:22.sp,
+                    decoration:const BoxDecoration(
+                      border:Border(
+                        bottom: BorderSide(color:Colors.grey,width:1),),
+                    ),
+                    child:
+                  SizedBox(width:MediaQuery.of(context).size.width * 0.5,              
+                  child:                 
+                  Text(free ?? "",
+                    style:TextStyle(
+                      fontSize:12.sp,
+                    ),
+                  ),
+                  ),
                   ),
                 ],
               ),
@@ -1262,10 +1328,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 200,
-                    childAspectRatio: 3.4,
-                    crossAxisSpacing: 10,
+                  gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 150.sp,
+                    childAspectRatio: 2.8 ,
+                    crossAxisSpacing: 5,
                     mainAxisSpacing: 10,
                   ),
                   itemCount: records.length,
@@ -1285,7 +1351,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         });
                       },
                       child: Container(
-                        margin:  const EdgeInsets.symmetric(vertical:2,horizontal:10),
+                        margin:  const EdgeInsets.symmetric(vertical:2,horizontal:5),
                         decoration: BoxDecoration(
                           color: isSelected 
                             ? Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,50,50,50) :const Color(0x156E79CF) 
@@ -1301,11 +1367,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding:  const EdgeInsets.all(5),
                         
                         child: Column(
-                          //crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
                               record['overtime_reason'] ?? '',
-                              style:  const TextStyle(fontSize: 18),
+                              style:  TextStyle(fontSize: 15.sp),
                               overflow: TextOverflow.ellipsis, // 長い文字列を省略
                               maxLines: 1, // 最大1行
                             ),
@@ -1333,7 +1399,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 final records = snapshot.data ?? {};
                 final record = records;
-                  return Row (
+                  return Container(
+                    padding:EdgeInsets.fromLTRB(10.sp,0,10.sp,0),
+                    child:Row (
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       
@@ -1360,18 +1428,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           
                         },
                         style: OutlinedButton.styleFrom(
-                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,185,188,195) : const Color.fromARGB(255, 225, 238, 255),),
+                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,185,188,195) : const Color.fromARGB(255, 225, 238, 255),
+                          padding:EdgeInsets.fromLTRB(15.sp,0,15.sp,0),
+                          ),
                         child: Row(children:[
-                          Icon(Icons.login,color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,80,80,100) :const Color.fromARGB(255,80,80,100)),
+                          Icon(Icons.login,color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,80,80,100) :const Color.fromARGB(255,80,80,100),size:25.sp),
                           const SizedBox(width:10),
                           Column(children:[
                           if (record['check_in'] != null && record['check_in'] != L10n.of(context)!.unregistered && record['check_in'] != "N/A")
-                            Text(record['check_in']),
+                            Text(record['check_in'],style:TextStyle(fontSize:13.sp),),
                           Text(L10n.of(context)!.atwork,  //出勤
                             style:TextStyle(
                               fontSize:Localizations.localeOf(context).languageCode == 'ja' 
-                                ? record['check_in'] != null && record['check_in'] != L10n.of(context)!.unregistered && record['check_in'] != "N/A" ? 20 : 35 
-                                : 20,color:const Color.fromARGB(255,80,80,100)),
+                                ? record['check_in'] != null && record['check_in'] != L10n.of(context)!.unregistered && record['check_in'] != "N/A" ? 19.sp : 33.sp 
+                                : 19.sp,color:const Color.fromARGB(255,80,80,100)),
                           ),
                           
 
@@ -1401,24 +1471,27 @@ class _HomeScreenState extends State<HomeScreen> {
                           setState((){});
                         },
                         style: OutlinedButton.styleFrom(
-                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,35,30,30) :const Color.fromARGB(255, 255, 242, 232),),
+                          backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,35,30,30) :const Color.fromARGB(255, 255, 242, 232),
+                          padding:EdgeInsets.fromLTRB(15.sp,0,15.sp,0),
+                          ),
                         child: Row(children:[
                           Column(children:[
                           if (record['check_out'] != null && record['check_out'] != L10n.of(context)!.unregistered && record['check_out'] != "N/A")
-                            Text(record['check_out']),
+                            Text(record['check_out'],style:TextStyle(fontSize:13.sp),),
                           Text(L10n.of(context)!.leavingwork,  //退勤
                             style:TextStyle(
                               fontSize:Localizations.localeOf(context).languageCode == 'ja' 
-                                ? record['check_out'] != null && record['check_out'] != L10n.of(context)!.unregistered && record['check_out'] != "N/A" ? 20 : 35  
-                                : 20,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :const Color.fromARGB(255,80,80,100)),
+                                ? record['check_out'] != null && record['check_out'] != L10n.of(context)!.unregistered && record['check_out'] != "N/A" ? 19.sp : 33.sp  
+                                : 19.sp,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :const Color.fromARGB(255,80,80,100)),
                         ),
                         ],),
                           const SizedBox(width:10),
-                          Icon(Icons.logout,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :const Color.fromARGB(255,80,80,100)),
+                          Icon(Icons.logout,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :const Color.fromARGB(255,80,80,100),size:25.sp),
                         ],),
                       ),
                       
                     ],
+                  ),
                   );
               },),
                 const SizedBox(height:30),
@@ -1442,13 +1515,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   });
                 },
               child:  Row(children:[
-                Icon(Icons.list,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ),
+                Icon(Icons.list,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,size:25.sp),
                 const SizedBox(width:5),
                 Text(L10n.of(context)!.list,  //一覧
-                style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 30 : 25,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),),
+                style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 29.sp : 24.sp,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),),
               ],),
               ),
-              const SizedBox(width:40),
+              SizedBox(width:40.sp),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   side: const BorderSide(
@@ -1466,10 +1539,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   });
                 },
               child: Row(children:[
-                Icon(Icons.settings,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ),
+                Icon(Icons.settings,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,size:25.sp),
                 const SizedBox(width:5),
                 Text(L10n.of(context)!.config,
-                style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 30 :25,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),),
+                style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 29.sp :24.sp,color: Theme.of(context).brightness == Brightness.dark ? Colors.white : null ,),),
               ],),
               ),
                 ],
@@ -1480,6 +1553,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    ),
     );
   }
   
@@ -1673,7 +1747,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
         return AlertDialog(
           title: Column (children:[
             Text(L10n.of(context)!.edit),
-            Text(L10n.of(context)!.itemnameEdit ,style:const TextStyle(fontSize:15)),
+            Text(L10n.of(context)!.itemnameEdit ,style:TextStyle(fontSize:14.sp)),
             ],),
           content: 
             TextField(
@@ -1745,8 +1819,11 @@ class _ConfigScreenState extends State<ConfigScreen>{
         return StatefulBuilder(
           builder:(context,setState){
             return AlertDialog(
-              title: Text(L10n.of(context)!.ontime), //定時設定
-              content:SizedBox(height:130,child:
+              title: Text(L10n.of(context)!.ontime,style:TextStyle(fontSize:15.sp)), //定時設定
+              content:SizedBox(
+                height:MediaQuery.of(context).size.width*0.4,
+                width:MediaQuery.of(context).size.width*0.6,
+              child:
               Column(children:[
                 const SizedBox(height:10),
                 TextButton(
@@ -1757,7 +1834,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                     }
                   },
                   child: Text( onTimeIn != null ? "${L10n.of(context)!.attendance_time}   ${MaterialLocalizations.of(context).formatTimeOfDay(onTimeIn!, alwaysUse24HourFormat: true)}": "${L10n.of(context)!.attendance_time} : ${L10n.of(context)!.notset}",
-                    style:const TextStyle(fontSize:18,decoration: TextDecoration.underline),),
+                    style:TextStyle(fontSize:16.sp,decoration: TextDecoration.underline),),
                 ),
                 const SizedBox(height:15),
                 TextButton(
@@ -1768,7 +1845,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                     }
                   },
                   child: Text( onTimeOut != null ? "${L10n.of(context)!.leavework_time}   ${MaterialLocalizations.of(context).formatTimeOfDay(onTimeOut!, alwaysUse24HourFormat: true)}": "${L10n.of(context)!.leavework_time} : ${L10n.of(context)!.notset}",
-                  style:const TextStyle(fontSize:18,decoration: TextDecoration.underline),), 
+                  style:TextStyle(fontSize:16.sp,decoration: TextDecoration.underline),), 
                 ),
 
               ]),),
@@ -1783,7 +1860,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),),
                       ),
-                    child: Text(L10n.of(context)!.cancel),
+                    child: Text(L10n.of(context)!.cancel,style:TextStyle(fontSize:12.sp)),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   TextButton(
@@ -1794,7 +1871,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),),
                       ),
-                    child: Text(L10n.of(context)!.ok),
+                    child: Text(L10n.of(context)!.ok,style:TextStyle(fontSize:12.sp)),
                     onPressed: () async{
                       if (inTimeTemp != null){
                       widget.onTimeChangeIn(inTimeTemp);
@@ -1836,7 +1913,8 @@ class _ConfigScreenState extends State<ConfigScreen>{
           children:[
             const Icon(Icons.settings),
             const SizedBox(width:10),
-            Text(L10n.of(context)!.config),
+            Text(L10n.of(context)!.config,
+              style:TextStyle(fontSize:18.sp),),
           ],
         ),
       ),
@@ -1897,113 +1975,118 @@ class _ConfigScreenState extends State<ConfigScreen>{
           
         Column(children:[
         
-        Row( 
+        Row( mainAxisAlignment:MainAxisAlignment.center,
           children: [
             const SizedBox(width:20),
             Container(
               
-              width:105,
+              width:MediaQuery.of(context).size.width *0.9 ,
               child:
             Column( crossAxisAlignment:CrossAxisAlignment.center,
               children:[
-              const SizedBox(height:2),
-              Text(L10n.of(context)!.theme), //テーマカラー
-              const SizedBox(height:28),
-              Text(L10n.of(context)!.font), //フォント
-              const SizedBox(height:28),
-              Text(L10n.of(context)!.language), //言語
-              const SizedBox(height:28),
-              Text(L10n.of(context)!.ontime),//定時設定
-             
-
-              
-            ]),),
-            const Column( 
-              children:[
-              SizedBox(height:5),
-              Text("：  "),
-              SizedBox(height:28),
-              Text("：  "),
-              SizedBox(height:28),
-              Text("：  "),
-              SizedBox(height:28),
-              Text("："),
-              
-
-            ]),
-            Column(crossAxisAlignment:CrossAxisAlignment.start,
-              children:[
-              DropdownButton<String>(
-                value: _selectedTheme,
-                onChanged: (String? newValue){
-                  if(newValue != null){
-                    widget.onThemeChange(newValue);
-                    setState((){ _selectedTheme = newValue; });
-                  }
-                },
-                items: <Map<String,String>>[
-                  {'display':L10n.of(context)!.blue,'value':'blue'},
-                  {'display':L10n.of(context)!.red,'value':'red'},
-                  {'display':L10n.of(context)!.green,'value':'green'},
-                  {'display':L10n.of(context)!.yellow,'value':'yellow'},
-                  {'display':L10n.of(context)!.simple,'value':'mono'},
-                  {'display':L10n.of(context)!.dark,'value':'dark'},
-                  {'display':L10n.of(context)!.tdefault,'value':'default'},
-                ].map<DropdownMenuItem<String>>((Map<String,String> theme){
-                  return DropdownMenuItem<String>(
-                    value: theme['value'],
-                    child: Text(theme['display']!),
-                  );
-                }).toList(),
-              ),
-
-              DropdownButton<String>(
-                value: _selectedFont,
-                onChanged: (String? newValue){
-                  if (newValue != null){
-                    widget.onFontChange(newValue);
-                    setState((){ _selectedFont = newValue ;});
-                  }
-                },
-                items: <Map<String,String>>[
-                  {'display':L10n.of(context)!.gothic,'value':'Gothic'},  //ゴシック
-                  {'display':L10n.of(context)!.mincho,'value':'Mincho'},  //明朝体
-                  {'display':L10n.of(context)!.anzu,'value':'Anzu'},  //あんずもじ
-                  {'display':'Annai MN','value':'Annai'},] 
-                  .map<DropdownMenuItem<String>>((Map<String,String> font){
-                    return DropdownMenuItem<String>(
-                      value: font['value'],
-                      child: Text(font['display']!),
-                    );
-                  }).toList(),
-              ),
-              DropdownButton<String>(
-                value: _selectedLanguage,
-                onChanged: (String? newValue){
-                  if (newValue != null){
-                    widget.onLanguageChange(newValue);
-                    setState((){ _selectedLanguage = newValue ;});
-                  }
-                },
-                items: <Map<String,String>>[
-                  {'display':L10n.of(context)!.japanese,'value':'ja'},
-                  {'display':'English','value':'en'},
-                  ]
-                  .map<DropdownMenuItem<String>>((Map<String,String> language){
-                    return DropdownMenuItem<String>(
-                      value: language['value'],
-                      child: Text(language['display']!),
-                    );
-                  }).toList(),
-              ),
-              const SizedBox(height:2),
-
-              FutureBuilder<Map<String,dynamic>>(future:fetchOnTimeInOut(),builder:(context,snapshot){
+                Container(margin:EdgeInsets.only(top:5.sp,bottom: 5.sp),child:
+                Row(children:[
+                  SizedBox(width:100.sp,child:Center(
+                    child:Text(L10n.of(context)!.theme,style:TextStyle(fontSize:15.sp)), //テーマカラー
+                  ),),
+                  Text("：  ",style:TextStyle(fontSize:15.sp)),
+                  DropdownButton2<String>(
+                    value: _selectedTheme,
+                  
+                    onChanged: (String? newValue){
+                      if(newValue != null){
+                        widget.onThemeChange(newValue);
+                        setState((){ _selectedTheme = newValue; });
+                      }
+                    },
+                    items: <Map<String,String>>[
+                      {'display':L10n.of(context)!.blue,'value':'blue'},
+                      {'display':L10n.of(context)!.red,'value':'red'},
+                      {'display':L10n.of(context)!.green,'value':'green'},
+                      {'display':L10n.of(context)!.yellow,'value':'yellow'},
+                      {'display':L10n.of(context)!.simple,'value':'mono'},
+                      {'display':L10n.of(context)!.dark,'value':'dark'},
+                      {'display':L10n.of(context)!.tdefault,'value':'default'},
+                    ].map<DropdownMenuItem<String>>((Map<String,String> theme){
+                      return DropdownMenuItem<String>(
+                        value: theme['value'],
+                        child: Container(height:25.sp,alignment:Alignment.center,
+                        child:Text(theme['display']!,style:TextStyle(fontSize:13.sp)),
+                      ),);
+                    }).toList(),
+                    menuItemStyleData:MenuItemStyleData(height:25.sp),
+                  ),
+                ]),),
+                Container(margin:EdgeInsets.only(top:5.sp,bottom: 5.sp),child:
+                Row(children:[
+                  SizedBox(width:100.sp,child:Center(
+                  child:Text(L10n.of(context)!.font,style:TextStyle(fontSize:15.sp)), //フォント
+                  ),),
+                  Text("：  ",style:TextStyle(fontSize:15.sp)),
+                  DropdownButton2<String>(
+                    value: _selectedFont,
+                    onChanged: (String? newValue){
+                      if (newValue != null){
+                        widget.onFontChange(newValue);
+                        setState((){ _selectedFont = newValue ;});
+                      }
+                    },
+                    items: <Map<String,String>>[
+                      {'display':L10n.of(context)!.gothic,'value':'Gothic'},  //ゴシック
+                      {'display':L10n.of(context)!.mincho,'value':'Mincho'},  //明朝体
+                      {'display':L10n.of(context)!.anzu,'value':'Anzu'},  //あんずもじ
+                      {'display':'Annai MN','value':'Annai'},] 
+                      .map<DropdownMenuItem<String>>((Map<String,String> font){
+                        return DropdownMenuItem<String>(
+                          value: font['value'],
+                          child: Container(alignment:Alignment.center,
+                          child: Text(font['display']!,style:TextStyle(fontSize:13.sp)),
+                        ),);
+                      }).toList(),
+                    menuItemStyleData:MenuItemStyleData(height:25.sp),
+                  ),
+                ]),),
+                Container(margin:EdgeInsets.only(top:5.sp,bottom: 5.sp),child:
+                Row(children:[
+                  SizedBox(width:100.sp,child:Center(
+                  child:Text(L10n.of(context)!.language,style:TextStyle(fontSize:15.sp)), //言語
+                  ),),
+                  Text("：  ",style:TextStyle(fontSize:15.sp)),
+                  DropdownButton2<String>(
+                    value: _selectedLanguage,
+                    onChanged: (String? newValue){
+                      if (newValue != null){
+                        widget.onLanguageChange(newValue);
+                        setState((){ _selectedLanguage = newValue ;});
+                      }
+                    },
+                    items: <Map<String,String>>[
+                      {'display':L10n.of(context)!.japanese,'value':'ja'},
+                      {'display':'English','value':'en'},
+                      ]
+                      .map<DropdownMenuItem<String>>((Map<String,String> language){
+                        return DropdownMenuItem<String>(
+                          value: language['value'],
+                          child: Container(height:25.sp,alignment:Alignment.center,
+                          child: Text(language['display']!,style:TextStyle(fontSize:13.sp)),
+                        ),);
+                      }).toList(),
+                      menuItemStyleData:MenuItemStyleData(height:25.sp),
+                  ),
+                ]),),
+                Container(margin:EdgeInsets.only(top:5.sp,bottom: 5.sp),child:
+                Row(children:[
+                  SizedBox(width:100.sp,child:Center(
+                  child:Text(L10n.of(context)!.ontime,style:TextStyle(fontSize:15.sp)), //定時設定
+                  ),),
+                  Text("：  ",style:TextStyle(fontSize:15.sp)),
+                  
+                  FutureBuilder<Map<String,dynamic>>(future:fetchOnTimeInOut(),builder:(context,snapshot){
                     if(snapshot.connectionState == ConnectionState.waiting){
                       return const CircularProgressIndicator();
                     } else if (snapshot.hasData && snapshot.data != null){
                       final data = snapshot.data!;
-                      print("fetch data:$data");
+                      
                       TimeOfDay? onTimeIn;
                       TimeOfDay? onTimeOut;
                       if(data['onTimeIn'] != null){
@@ -2024,12 +2107,12 @@ class _ConfigScreenState extends State<ConfigScreen>{
                    Text( onTimeIn != null  
                     ? "${L10n.of(context)!.inwork}  ${MaterialLocalizations.of(context).formatTimeOfDay(onTimeIn, alwaysUse24HourFormat: true)} "
                     : "${L10n.of(context)!.inwork}  ${L10n.of(context)!.notset}",
-                   style: const TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,)), 
+                   style: TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,fontSize:13.sp)), 
                    const SizedBox(width:5),
                    Text( onTimeOut != null  
                     ? "${L10n.of(context)!.outwork}  ${MaterialLocalizations.of(context).formatTimeOfDay(onTimeOut, alwaysUse24HourFormat: true)}"
                     : "${L10n.of(context)!.outwork}  ${L10n.of(context)!.notset}",
-                   style: const TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,)),            
+                   style: TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,fontSize:13.sp)),            
                 ]),
                 ),
                 
@@ -2044,12 +2127,14 @@ class _ConfigScreenState extends State<ConfigScreen>{
                 },
                 child: 
                    Text( L10n.of(context)!.notset,
-                   style: const TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,),             
+                   style: TextStyle(decoration:TextDecoration.underline,decorationColor:Colors.grey,decorationThickness:2,fontSize:15.sp),             
                 ),);
                 
                 }},),
-          
-            ]),
+                ]),),
+
+            ]),),
+            
           ]),
            
        
@@ -2064,8 +2149,8 @@ class _ConfigScreenState extends State<ConfigScreen>{
         Column(mainAxisAlignment:MainAxisAlignment.end,
           children:[
             
-            Text(L10n.of(context)!.itemlist,  //項目リスト
-                      style: const TextStyle(fontSize:20),
+            Text(L10n.of(context)!.itemlist,  //定型文リスト
+                      style: TextStyle(fontSize:19.sp),
                       ),
             Row(children:[  
               const SizedBox(width:20),
@@ -2092,10 +2177,10 @@ class _ConfigScreenState extends State<ConfigScreen>{
 
                     return  GridView.builder(
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 1,
-                        childAspectRatio:3.4,
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 4,
+                        childAspectRatio:2.1,
                       ),
                       itemCount:records.length ,
                       itemBuilder: (context,index){
@@ -2125,7 +2210,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                           },
                           
                       child: Container(
-                        margin: const EdgeInsets.symmetric(vertical:2,horizontal:5),
+                        margin: const EdgeInsets.symmetric(vertical:5,horizontal:2),
                         decoration: BoxDecoration(
                           color: selectedIndex == index 
                             ? Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,50,50,50) :const Color(0x156E79CF)
@@ -2138,12 +2223,13 @@ class _ConfigScreenState extends State<ConfigScreen>{
                         ),
                         borderRadius: BorderRadius.circular(15),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical:2,horizontal:8),
+                        padding: const EdgeInsets.symmetric(vertical:2,horizontal:5),
                           child: Column(
-                            crossAxisAlignment:CrossAxisAlignment.start,
+                            crossAxisAlignment:CrossAxisAlignment.center,
+                            mainAxisAlignment:MainAxisAlignment.center,
                             children: [
                               Text(record['overtime_reason'] ?? '',
-                                style: TextStyle(fontSize:measure_size),
+                                style: TextStyle(fontSize:15.sp),
                                 softWrap: false,
                                 overflow: TextOverflow.fade,
                                 //maxLines:2,
@@ -2201,17 +2287,16 @@ class _ConfigScreenState extends State<ConfigScreen>{
           children:[
         TextButton(
           onPressed: () =>  openUrl(context, Localizations.localeOf(context).languageCode == 'ja' ? jpTermsUrl : enTermsUrl),
-          child:Text(L10n.of(context)!.terms),
+          child:Text(L10n.of(context)!.terms,style:TextStyle(fontSize:11.sp,)),
         ),
         TextButton(
           onPressed: () =>  openUrl(context, Localizations.localeOf(context).languageCode == 'ja' ? jpPrivacyPolicyUrl : enPrivacyPolicyUrl),
-          child:Text(L10n.of(context)!.privacy),
+          child:Text(L10n.of(context)!.privacy,style:TextStyle(fontSize:11.sp,)),
         ),
         TextButton(
           onPressed: () =>  openUrl(context, Localizations.localeOf(context).languageCode == 'ja' ? jpQAndAUrl : enQAndAUrl),
-          child:const Text("FAQ"),
+          child: Text("FAQ",style:TextStyle(fontSize:11.sp,)),
         ),
-        //const SizedBox(width:40)
 
         ]),
         
@@ -2228,43 +2313,52 @@ class _ConfigScreenState extends State<ConfigScreen>{
                 _showInputDialog(context);//定型文作成
               },
               child:Text(L10n.of(context)!.phrase,   //'定型文作成'
-                style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 28 :23,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null),
+                style: TextStyle(fontSize:Localizations.localeOf(context).languageCode == 'ja' ? 25.sp :21.sp,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null),
               ),
             ),
           ),
         ),
-        const Align(alignment: Alignment.bottomRight,
-          child: Padding(padding: EdgeInsets.fromLTRB(0,0,15,8),
+        Align(alignment: Alignment.bottomRight,
+          child: Padding(padding: const EdgeInsets.fromLTRB(0,0,15,8),
             child:
-          Text("©2024 Mig's Factory",style:TextStyle(fontSize:10)),
+          Text("©2024 Mig's Factory",style:TextStyle(fontSize:10.sp)),
           ),
         ),
       ],),
       ],),
-
-        floatingActionButton: FloatingActionButton(
+        
+        floatingActionButton: SizedBox(
+          width:40.sp,
+          height:40.sp,
+          child: FloatingActionButton(
           onPressed:() async {
             if (selectedIndex == null){
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content:Text(L10n.of(context)!.tobedelete)), //'削除対象を選択してください。'
+                SnackBar(content:Text(L10n.of(context)!.tobedelete,style:TextStyle(fontSize:9.sp,))), //'削除対象を選択してください。'
               );
             } else {
               showDialog(
                 context:context,
                 builder:(_) => AlertDialog(
-                  title:Text(L10n.of(context)!.confirm_delete),  //'削除確認'
-                  content: Text(
+                  title:Text(L10n.of(context)!.confirm_delete,style:TextStyle(fontSize:15.sp)),  //'削除確認'
+                  content: 
+                  Padding(
+                    padding:EdgeInsets.all(10.sp),
+                    child:
+                  Text(
                     L10n.of(context)!.reallydelete //"本当に削除してもよろしいですか？"
+                    ,style:TextStyle(fontSize:13.sp)
+                  ),
                   ),
                   actions: [
                     TextButton(
-                      child:const Text("Cancel"),
+                      child: Text("Cancel",style:TextStyle(fontSize:12.sp)),
                       onPressed: () {
                         Navigator.of(context).pop();
                       },
                     ),
                     TextButton(
-                      child:const Text("OK"),
+                      child: Text("OK",style:TextStyle(fontSize:12.sp)),
                       onPressed: () async{
                         Navigator.of(context).pop();
                           final selectRecord = records[selectedIndex!];
@@ -2272,7 +2366,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                           await DatabaseHelper.deleteRecord("overtime_reason_table",'id = ?',[selectId]);
                           setState((){selectedIndex = null;});
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(L10n.of(context)!.deleted)),);  //削除しました。
+                            SnackBar(content: Text(L10n.of(context)!.deleted,style:TextStyle(fontSize:9.sp,))),);  //削除しました。
                       }
                       
                     ),
@@ -2281,8 +2375,10 @@ class _ConfigScreenState extends State<ConfigScreen>{
               );
             }
           },
-          child:const Icon(Icons.delete),
+          child:Icon(Icons.delete,size:20.sp),
         ),
+        ),
+        
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
 
     );
@@ -2295,22 +2391,23 @@ class _ConfigScreenState extends State<ConfigScreen>{
         return AlertDialog(
           title: Column(crossAxisAlignment: CrossAxisAlignment.start,
             children:[
-            Text(L10n.of(context)!.itemname,style:const TextStyle(fontSize:15,)), //'項目名を入力してください。'
+            Text(L10n.of(context)!.itemname,style:TextStyle(fontSize:14.sp,)), //'項目名を入力してください。'
             const SizedBox(height:2),
-            Text(L10n.of(context)!.omission,style:const TextStyle(fontSize:12,),),  //'(15文字以内:長文は一覧では省略されます。)'
+            Text(L10n.of(context)!.omission,style:TextStyle(fontSize:11.sp,),),  //'(15文字以内:長文は一覧では省略されます。)'
+            const SizedBox(height:20),
             ],),
           content: TextField(
             controller: _controller,
             decoration: InputDecoration(hintText: L10n.of(context)!.here),  //'ここに入力'
             maxLength:15,
-            
+            style:TextStyle(fontSize:11.sp),
           ),
           actions: [
             TextButton(
               onPressed: (){
                 Navigator.of(context).pop();
               },
-              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
             ),
             TextButton(
               onPressed: ()async {
@@ -2331,7 +2428,7 @@ class _ConfigScreenState extends State<ConfigScreen>{
                 }
                 
               },
-              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
             ),
           ],
         );
@@ -2415,12 +2512,13 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
         //backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Row(
           children:[
-            Text(L10n.of(context)!.monthlist), //月別一覧
+            Text(L10n.of(context)!.monthlist,style:TextStyle(fontSize:15.sp,)), //月別一覧
         ],),
         actions: [
           Builder(
             builder:(BuildContext context){
-              return IconButton(icon: const Icon(Icons.calendar_month),
+              return IconButton(icon: Icon(Icons.calendar_month,size:15.sp),
+              
           onPressed: (){ 
             _navigateToCalendar(context);
           },
@@ -2432,7 +2530,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
 
       body: Column(children:[
         Row(children:[
-          TextButton(child:Text(" < ", style:TextStyle(fontWeight:FontWeight.bold,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null),),
+          TextButton(child:Text(" < ", style:TextStyle(fontSize:15.sp,fontWeight:FontWeight.bold,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null),),
             onPressed:()async{
               setState((){
                 if (monthList==DateTime(2020,1)){
@@ -2451,13 +2549,13 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
           TextButton(
             child: 
             Text(intl.DateFormat(dateFormatYm).format(monthList), //y年M月
-            style: TextStyle(fontSize:20,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null),),
+            style: TextStyle(fontSize:19.sp,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null),),
             onPressed:(){
               _pickMonth(context);
             },
           ),
 
-          TextButton(child:Text(" > ", style:TextStyle(fontWeight:FontWeight.bold,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null),),
+          TextButton(child:Text(" > ", style:TextStyle(fontSize:15.sp,fontWeight:FontWeight.bold,color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null),),
             onPressed:()async{
               setState((){
                 if (monthList == DateTime(2150,12)){
@@ -2550,7 +2648,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
                     return Padding(padding: const EdgeInsets.only(right:20),
                       child: Align(
                       alignment:Alignment.centerRight,
-                      child:Text('${L10n.of(context)!.totalovertime} : $totalOvertimeTODhmString'),
+                      child:Text('${L10n.of(context)!.totalovertime} : $totalOvertimeTODhmString',style:TextStyle(fontSize:12.sp)),
                     ),);
                   }
 
@@ -2627,18 +2725,18 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
                           Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,
                             children:[
                             Text('${L10n.of(context)!.date}: $formatDate',
-                              style:const TextStyle(fontWeight:FontWeight.bold,)),
+                              style:TextStyle(fontWeight:FontWeight.bold,fontSize:12.sp)),
                             Text(overtime != 0 ? '${L10n.of(context)!.overtime}: ${overtimeTimeOfDay.hour}h${overtimeTimeOfDay.minute}m' : "",
-                              style:const TextStyle(fontSize:12)),
+                              style: TextStyle(fontSize:12.sp)),
                             const SizedBox.shrink(),
                           ],),
                           Row(children:[
-                            Text('${L10n.of(context)!.attendance_time} : ${record['check_in'] ?? L10n.of(context)!.unregistered}'),
+                            Text('${L10n.of(context)!.attendance_time} : ${record['check_in'] ?? L10n.of(context)!.unregistered}',style:TextStyle(fontSize:12.sp)),
                             const SizedBox(width:25),
-                            Text('${L10n.of(context)!.leavework_time} : ${record['check_out'] ?? L10n.of(context)!.unregistered}'),
+                            Text('${L10n.of(context)!.leavework_time} : ${record['check_out'] ?? L10n.of(context)!.unregistered}',style:TextStyle(fontSize:12.sp)),
                           ]),
-                          Text('${L10n.of(context)!.reason} : ${record['overtime_reasons'] ?? ''}'),
-                          Text('${L10n.of(context)!.remarks} : ${record['free'] ?? ''}'),
+                          Text('${L10n.of(context)!.reason} : ${record['overtime_reasons'] ?? ''}',style:TextStyle(fontSize:12.sp)),
+                          Text('${L10n.of(context)!.remarks} : ${record['free'] ?? ''}',style:TextStyle(fontSize:12.sp)),
                         ],
                       ),
                     ),
@@ -2654,30 +2752,34 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
           Positioned(
             bottom: 16,
             left : 30,
-            child: FloatingActionButton(
+            child: SizedBox(
+          width:40.sp,
+          height:40.sp,
+          child: FloatingActionButton(
               heroTag: null,
               onPressed: ()async{
               if (selectedIndex == null){
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content:Text(L10n.of(context)!.tobedelete)), //削除対象を選択してください。
+                SnackBar(content:Text(L10n.of(context)!.tobedelete,style:TextStyle(fontSize: 10.sp))), //削除対象を選択してください。
               );
             } else {
               showDialog(
                 context:context,
                 builder:(_) => AlertDialog(
-                  title:Text(L10n.of(context)!.confirm_delete), //削除確認
+                  title:Text(L10n.of(context)!.confirm_delete,style:TextStyle(fontSize: 15.sp)), //削除確認
                   content: Text(
                     L10n.of(context)!.reallydelete  //"本当に削除してもよろしいですか？"
+                    ,style:TextStyle(fontSize: 11.sp)
                   ),
                   actions: [
                     TextButton(
-                      child:Text("Cancel",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+                      child:Text("Cancel",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:11.sp)),
                       onPressed: () {
                         Navigator.of(context).pop();
                       },
                     ),
                     TextButton(
-                      child:Text("OK",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+                      child:Text("OK",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:11.sp)),
                       onPressed: () async{
                         Navigator.of(context).pop();
                           final selectRecord = records[selectedIndex!];
@@ -2685,7 +2787,7 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
                           await DatabaseHelper.deleteRecord("attendance_table",'id = ?',[selectId]);
                           setState((){selectedIndex = null;});
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(L10n.of(context)!.deleted)),);  //削除しました。
+                            SnackBar(content: Text(L10n.of(context)!.deleted,style:TextStyle(fontSize: 10.sp))),);  //削除しました。
                       }
                       
                     ),
@@ -2695,20 +2797,25 @@ class _AttendanceListScreenState extends State<AttendanceListScreen> with Automa
             }
             },
 
-              child:const Icon(Icons.delete ),
+              child: Icon(Icons.delete ,size:19.sp),
             ),
+          ),
           ),
           Positioned(
             bottom: 16,
             right: 16,
-            child: FloatingActionButton(onPressed: ()async{
+            child: SizedBox(
+          width:40.sp,
+          height:40.sp,
+          child: FloatingActionButton(onPressed: ()async{
               final String? result = await _showAddAttendanceModal(context,monthList);
               _stateValue = result ?? 'state';
                 setState((){ });
               
             },
-              child:const Icon(Icons.playlist_add ),
+              child: Icon(Icons.playlist_add ,size:19.sp),
             ),
+          ),
           ),
         ],
       ),
@@ -2753,11 +2860,12 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
       return StatefulBuilder(
         builder:(BuildContext context,StateSetter setState){
       return AlertDialog(
-        title: Text(L10n.of(context)!.edit),  //編集
+        title: Text(L10n.of(context)!.edit,style:TextStyle(fontSize:20.sp)),  //編集
         content: SingleChildScrollView(
           child: Column(children:[
           Align(  alignment: Alignment.centerLeft,
-            child: Text(intl.DateFormat('y-M-dd(EEE)').format(displayDate),style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),),
+            child: Text(intl.DateFormat('y-M-dd(EEE)').format(displayDate),style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:20.sp)),),
+          SizedBox(height:10.sp),
           TextButton(
             style: TextButton.styleFrom(
               side: const BorderSide(color:Colors.grey,width:1),
@@ -2772,8 +2880,11 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
             },
             child: Text(checkInTime != null 
               ? "${L10n.of(context)!.attendance_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime!, alwaysUse24HourFormat: true)}" 
-              : '${L10n.of(context)!.attendance_time} : ${item['check_in']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              : '${L10n.of(context)!.attendance_time} : ${item['check_in']}',
+              style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:15.sp)
+              ),
           ),
+          SizedBox(height:10.sp),
           TextButton(
             style: TextButton.styleFrom(
               side: const BorderSide(color:Colors.grey,width:1),
@@ -2788,8 +2899,10 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
             },
             child: Text(checkOutTime != null 
               ? "${L10n.of(context)!.leavework_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime!, alwaysUse24HourFormat: true)}" 
-              : '${L10n.of(context)!.leavework_time} : ${item['check_out']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              : '${L10n.of(context)!.leavework_time} : ${item['check_out']}',
+              style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:15.sp)),
           ),
+          SizedBox(height:10.sp),
           Align(
                   alignment:Alignment.centerLeft,
                   child:
@@ -2808,7 +2921,7 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
                               : Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),
                             
                       ),
-                      child: Text(L10n.of(context)!.free,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),  //自由記述
+                      child: Text(L10n.of(context)!.free,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:15.sp)),  //自由記述
                     ),
           ),
           FutureBuilder<List<Map<String,dynamic>>>(
@@ -2826,8 +2939,8 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
 
                     return Container(
                       margin: const EdgeInsets.fromLTRB(0,10,0,15),
-                      width: MediaQuery.of(context).size.width *0.9,
-                      height: 150,
+                      width: MediaQuery.of(context).size.width *0.8,
+                      height: MediaQuery.of(context).size.height *0.2,
                       decoration: BoxDecoration(
                         border: Border.all(color:Colors.grey),
                         borderRadius: BorderRadius.circular(8),
@@ -2836,9 +2949,9 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
                         child:GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            childAspectRatio: 2.8,
+                          gridDelegate:  SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: MediaQuery.of(context).size.height/5,
+                            childAspectRatio: 2.6,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 0.5,
                           ),
@@ -2874,11 +2987,11 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
                                 ),
                                 padding:  const EdgeInsets.all(5),
                                 child: Column(
-                          
+                                  mainAxisAlignment:MainAxisAlignment.center,
                                   children: [
                                     Text(
                                       record['overtime_reason'] ?? '',
-                                      style:  const TextStyle(fontSize: 12),
+                                      style: TextStyle(fontSize: 11.sp),
                                       overflow: TextOverflow.ellipsis, // 長い文字列を省略
                                       maxLines: 1, // 最大2行
                                     ),
@@ -2904,8 +3017,9 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),),
                       ),
-            child: Text(L10n.of(context)!.cancel,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+            child: Text(L10n.of(context)!.cancel,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
           ),
+          const SizedBox(width:10),
           TextButton(
             onPressed:()async {
               checkInTime ??= (item['check_in'] != L10n.of(context)!.unregistered && item['check_in'] != "N/A")
@@ -2934,7 +3048,7 @@ Future<String?> _showEditDialog(BuildContext context,Map<String,dynamic> item)as
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),),
                       ),
-            child: Text(L10n.of(context)!.edit,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),  //編集
+            child: Text(L10n.of(context)!.edit,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),  //編集
           ),
         ],
       );
@@ -2949,21 +3063,44 @@ Future<TimeOfDay?> _showTimePicker(BuildContext context) async {
       context:context,
       initialTime: TimeOfDay.fromDateTime(DateTime.now()),
       builder: (context, child) {
-        return Localizations.override(
-          context: context,
-          locale:const Locale('en','US'),
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        return Theme(     
+          data: ThemeData.light().copyWith(
+            timePickerTheme:const TimePickerThemeData(
+              dayPeriodColor:Color.fromARGB(105,50,50,250),
+             ),
+            colorScheme:const ColorScheme.light(
+              primary:Color.fromARGB(255,120,120,230),
+              
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                textStyle: TextStyle(fontSize:13.sp),
+                )
+              ),
+            textTheme: TextTheme(bodyMedium:TextStyle(fontSize:12.sp,color:Colors.black),
+            ),
+          ),
+              
+          child:Localizations.override(
+            context: context,
+            locale: const Locale('en','US'), 
+          child:
+          MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false,
+              size:Size(MediaQuery.of(context).size.width*0.7,
+                MediaQuery.of(context).size.height * 0.7),),
             child: child!,
+          ),
           ),
         );
       },
-    );      
+      helpText:L10n.of(context)!.selecttime,
+      );      
     if (pickedDate != null){
       return pickedDate;
     }
       return null;
-    }
+  }
 
 Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
     final TextEditingController _controller = TextEditingController(text:free);
@@ -2974,28 +3111,28 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
         return AlertDialog(
           title: Column(crossAxisAlignment: CrossAxisAlignment.start,
             children:[
-            Text(L10n.of(context)!.content_input,style:const TextStyle(fontSize:15,)), //内容を入力してください。
+            Text(L10n.of(context)!.content_input,style:TextStyle(fontSize:15.sp,)), //内容を入力してください。
             const SizedBox(height:2),
-            Text(L10n.of(context)!.twentychar,style:const TextStyle(fontSize:12,),),  //（20文字以内）
+            Text(L10n.of(context)!.twentychar,style:TextStyle(fontSize:12.sp,),),  //（20文字以内）
             ],),
           content: TextField(
             controller: _controller,
             decoration: InputDecoration(hintText: L10n.of(context)!.here),  //ここに入力
             maxLength:20,
-            
+            style:TextStyle(fontSize:11.sp),
           ),
           actions: [
             TextButton(
               onPressed: (){
                   Navigator.of(context).pop(free);                 
               },
-              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:11.sp)),
             ),
             TextButton(
               onPressed: ()async {
                 Navigator.of(context).pop((_controller.text).trim());
               },
-              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:11.sp)),
             ),
           ],
         );
@@ -3017,21 +3154,44 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
       context:context,
       initialTime: TimeOfDay.fromDateTime(DateTime.now()),
       builder: (context, child) {
-        return Localizations.override(
-          context: context,
-          locale:const Locale('en','US'),
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        return Theme(     
+          data: ThemeData.light().copyWith(
+            timePickerTheme:const TimePickerThemeData(
+              dayPeriodColor:Color.fromARGB(105,50,50,250),
+             ),
+            colorScheme:const ColorScheme.light(
+              primary:Color.fromARGB(255,120,120,230),
+              
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                textStyle: TextStyle(fontSize:13.sp),
+                )
+              ),
+            textTheme: TextTheme(bodyMedium:TextStyle(fontSize:12.sp,color:Colors.black),
+            ),
+          ),
+              
+          child:Localizations.override(
+            context: context,
+            locale: const Locale('en','US'), 
+          child:
+          MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false,
+              size:Size(MediaQuery.of(context).size.width*0.7,
+                MediaQuery.of(context).size.height * 0.7),),
             child: child!,
+          ),
           ),
         );
       },
-    );      
+      helpText:L10n.of(context)!.selecttime,
+      );      
     if (pickedDate != null){
       return pickedDate;
     }
       return null;
-    }
+  }
     Future<void> _pickDate(BuildContext context,StateSetter setState)  async {
       DateTime? pickedDate = await showDatePicker(
         context: context,
@@ -3039,6 +3199,22 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
         firstDate: DateTime(2020),
         lastDate:DateTime(2100),
         locale: Localizations.localeOf(context),
+
+        
+        builder: (context,child){
+          return Theme(
+            data: ThemeData.light().copyWith(
+              
+              textButtonTheme:TextButtonThemeData(
+                style: TextButton.styleFrom(
+                  textStyle: TextStyle(fontSize:10.sp),
+                ),
+              ),
+            ),
+            child:child!,
+          );
+        }
+
       );
       if (pickedDate != null && pickedDate != _selectedDate) {
         setState((){
@@ -3055,15 +3231,15 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
         return AlertDialog(
           title: Column(crossAxisAlignment: CrossAxisAlignment.start,
             children:[
-            Text(L10n.of(context)!.itemname,style:const TextStyle(fontSize:15,)), //'項目名を入力してください。'
+            Text(L10n.of(context)!.itemname,style:TextStyle(fontSize:14.sp,)), //'項目名を入力してください。'
             const SizedBox(height:2),
-            Text(L10n.of(context)!.omission,style:const TextStyle(fontSize:12,),), //'(15文字以内:長文は一覧では省略されます。)'
+            Text(L10n.of(context)!.omission,style:TextStyle(fontSize:11.sp,),), //'(15文字以内:長文は一覧では省略されます。)'
             ],),
           content: TextField(
             controller: _controller,
             decoration: InputDecoration(hintText: L10n.of(context)!.here),  //'ここに入力'
             maxLength:15,
-            
+            style:TextStyle(fontSize:11.sp),
           ),
           actions: [
             TextButton(
@@ -3107,7 +3283,7 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
 
         return AlertDialog(
           title: Text(L10n.of(context)!.newinput, //新規入力
-            style:const TextStyle(fontSize:20),),
+            style:TextStyle(fontSize:19.sp),),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -3125,10 +3301,10 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: Text( intl.DateFormat(dateFormatLong).format(_selectedDate),style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null) ),  //y年M月d日(EEE)
+                      child: Text( intl.DateFormat(dateFormatLong).format(_selectedDate),style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),  //y年M月d日(EEE)
                     ),
                 ),
-
+                SizedBox(height:10.sp),
                 TextButton(                
                   onPressed: ()async {
                     final time = await _showTimePicker(context);
@@ -3138,13 +3314,14 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                   },
                   style: TextButton.styleFrom(
                         side: const BorderSide(color:Colors.grey,width:1),
-                        padding: const EdgeInsets.symmetric(horizontal:20,vertical:10),
+                        padding: EdgeInsets.symmetric(horizontal:20,vertical:10),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                   ),
-                  child: Text("${L10n.of(context)!.attendance_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime, alwaysUse24HourFormat: true)}",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),  //出勤時間
+                  child: Text("${L10n.of(context)!.attendance_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime, alwaysUse24HourFormat: true)}",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:13.sp)),  //出勤時間
                 ),
+                SizedBox(height:10.sp),
                 TextButton(               
                   onPressed: ()async {
                     final time = await _showTimePicker(context);
@@ -3159,8 +3336,9 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                           borderRadius: BorderRadius.circular(8),
                         ),
                   ),
-                  child: Text("${L10n.of(context)!.leavework_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime, alwaysUse24HourFormat: true)}",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)), //退勤時間
+                  child: Text("${L10n.of(context)!.leavework_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime, alwaysUse24HourFormat: true)}",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:13.sp)), //退勤時間
                 ),
+                SizedBox(height:5.sp),
                 Align(
                   alignment:Alignment.centerLeft,
                   child:
@@ -3179,7 +3357,7 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                               : Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),
                             
                       ),
-                      child: Text(L10n.of(context)!.free,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),  //自由記述
+                      child: Text(L10n.of(context)!.free,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),  //メモ
                     ),
                 ),
 
@@ -3197,8 +3375,8 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
 
                     return Container(
                       margin: const EdgeInsets.fromLTRB(0,10,0,15),
-                      width: MediaQuery.of(context).size.width *0.9,
-                      height: 150,
+                      width: MediaQuery.of(context).size.width *0.8,
+                      height: MediaQuery.of(context).size.height *0.2,
                       decoration: BoxDecoration(
                         border: Border.all(color:Colors.grey),
                         borderRadius: BorderRadius.circular(8),
@@ -3207,9 +3385,9 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                         child:GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            childAspectRatio: 2.8,
+                          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: MediaQuery.of(context).size.height/5,
+                            childAspectRatio: 2.6,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 0.5,
                           ),
@@ -3230,6 +3408,7 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                                 });
                               },
                               child: Container(
+                                
                                 margin: const EdgeInsets.symmetric(vertical:5,horizontal:5),
                                 decoration: BoxDecoration(
                                   color: isSelected 
@@ -3245,11 +3424,11 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                                 ),
                                 padding:  const EdgeInsets.all(5),
                                 child: Column(
-                          
+                                  mainAxisAlignment:MainAxisAlignment.center,
                                   children: [
                                     Text(
                                       record['overtime_reason'] ?? '',
-                                      style:  const TextStyle(fontSize: 12),
+                                      style:  TextStyle(fontSize: 11.sp),
                                       overflow: TextOverflow.ellipsis, // 長い文字列を省略
                                       maxLines: 1, // 最大2行
                                     ),
@@ -3278,13 +3457,14 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),),
                       ),
-                      child:Text(L10n.of(context)!.cancel),
+                      child:Text(L10n.of(context)!.cancel,style:TextStyle(fontSize: 11.sp)),
                     ),
                     const SizedBox(width:10),
                     TextButton(
                       onPressed: ()async {
                         final overReason = selectedIndices.toList();
                         final overtimeReason = overReason.join(',');
+                        
                         await AttendanceUtils.addAttendance(
                           context:context,
                           date:_selectedDate,
@@ -3303,7 +3483,7 @@ Future<String?> _showInputFreeDialog(BuildContext context,String? free) async {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),),
                       ),
-                      child:Text(L10n.of(context)!.regist), //登録
+                      child:Text(L10n.of(context)!.regist,style:TextStyle(fontSize: 11.sp)), //登録
                     ),
 
                   ]
@@ -3439,27 +3619,32 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
         appBar: AppBar(
           title: Row(
             children:[
-              Text(L10n.of(context)!.monthlist), //月別一覧
+              Text(L10n.of(context)!.monthlist,style:TextStyle(fontSize:15.sp)), //月別一覧
           ],),
           actions: [
-            IconButton(icon: const Icon(Icons.list),
+            IconButton(icon: Icon(Icons.list,size:18.sp),
+            
             onPressed: (){Navigator.of(context).pop(); },
             ),
           ],),
         body: Column(
           children: [
             TableCalendar(
-             headerStyle: const HeaderStyle(
+             headerStyle:  HeaderStyle(
                 formatButtonVisible:false,
+                leftChevronIcon:Icon(Icons.chevron_left,size:20.sp),
+                rightChevronIcon:Icon(Icons.chevron_right,size:20.sp)
               ),
               focusedDay: _focusedDay,
               firstDay: DateTime(2020),
               lastDay: DateTime(2150),
+              rowHeight:30.sp,
+              daysOfWeekHeight: 30.sp,
               calendarFormat: CalendarFormat.month,
               selectedDayPredicate: (day) =>isSameDay(_selectedDay, day),
               daysOfWeekStyle: DaysOfWeekStyle(
-                weekdayStyle: TextStyle(color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,200,200,200) :null),
-                weekendStyle: TextStyle(color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,200,200,200) :null),
+                weekdayStyle: TextStyle(color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,200,200,200) :null,fontSize:13.sp),
+                weekendStyle: TextStyle(color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,200,200,200) :null,fontSize:13.sp),
               ),
               onDaySelected: (selectedDay, focusedDay)async {
                   _selectedDay = selectedDay;
@@ -3472,21 +3657,35 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
               },
               eventLoader: _getEventsForDay,
               calendarStyle:  CalendarStyle(
-                defaultTextStyle:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,250,250,250) :null),
-                weekendTextStyle: TextStyle(color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,200,200,200) :null),
+                outsideTextStyle:TextStyle(color:Colors.grey,fontSize:12.sp),
+                defaultTextStyle:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,250,250,250) :null,fontSize:13.sp),
+                weekendTextStyle: TextStyle(color:Theme.of(context).brightness == Brightness.dark ? const Color.fromARGB(255,200,200,200) :null,fontSize:13.sp),
                 todayDecoration: const BoxDecoration(
-                  color: Color.fromARGB(255,255,200,150),
+                  //color: Color.fromARGB(255,230,230,250),
                   shape: BoxShape.circle,
-                  
+                  boxShadow:const [
+                    BoxShadow(
+                      color:Color.fromARGB(150,250,210,215),
+                      spreadRadius:3,
+                    ),
+                  ],
                 ),
-                todayTextStyle: const TextStyle(color:Colors.black,),
-                selectedDecoration: BoxDecoration(
+                todayTextStyle: TextStyle(color:Colors.black,fontSize:14.sp),
+                selectedDecoration: 
+                
+                BoxDecoration(
                   color: const Color.fromARGB(100,200,200,255),
                   shape: BoxShape.circle,
-                  border: Border.all(width:1.5,color: Colors.red),
-                  
+                  border: Border.all(width:1.5,color: Colors.red,),
+                  boxShadow:const [
+                    BoxShadow(
+                      color:Color.fromARGB(100,200,200,255),
+                      spreadRadius:3,
+                    ),
+                  ],
                 ),
-                selectedTextStyle: const TextStyle(color:Colors.black,),
+                
+                selectedTextStyle: TextStyle(color:Colors.black,fontSize:13.sp),
                 markerDecoration: const BoxDecoration(
                   color: Colors.red,
                   shape: BoxShape.circle,
@@ -3500,17 +3699,37 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                   this._focusedDay = focusedDay;
                   });
               },
+              
               calendarBuilders: CalendarBuilders(
+                selectedBuilder: (context,date,_){
+                  return Center(
+                    child:Stack(
+                      alignment:Alignment.center,
+                      children:[
+                        Container(
+                          width: 60,
+                          height: 60,
+                          decoration:BoxDecoration(
+                            shape:BoxShape.circle,
+                            color:Color.fromARGB(150,210,210,235),
+                            border:Border.all(color: Colors.red,width:1.5)
+                          ),
+                        ),
+                        Text('${date.day}',style:TextStyle(fontSize:16.sp)),
+                      ],
+                    ),
+                  );
+                },
                 headerTitleBuilder: (context,day){
                   return GestureDetector(
                     onTap:(){
                       _pickMonth(context);
                     },
                     child: Padding(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(5),
                       child: Text(
                         '${displayMonth!.year}${L10n.of(context)!.year} ${displayMonth!.month}${L10n.of(context)!.month}',
-                        style: const TextStyle(fontSize:20,),
+                        style:  TextStyle(fontSize:19.sp,),
                       ),
                     ),
                   );
@@ -3521,20 +3740,22 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
             const SizedBox(height: 20),
             //選択された日付のイベントをリスト表示
             Expanded(
+              child:Padding(padding:EdgeInsets.all(5.sp),
               child: ListView.builder(
                 itemCount: _getEventsForDay(_selectedDay!).length,
                 itemBuilder: (context, index){
                   final event = _getEventsForDay(_selectedDay!)[index];
                   final isSelected = _selectedEvent == event;
                   return ListTile(
-                    leading: const Icon(Icons.event),
-                    title: Text(event),
+                    leading: Icon(Icons.event,size:15.sp),
+                    title: Text(event,style:TextStyle(fontSize:12.sp)),
                     shape: RoundedRectangleBorder(
+                      
                       side: BorderSide(
                         color: isSelected 
                           ? Theme.of(context).brightness == Brightness.dark ? Colors.grey :const Color(0x8F6E79CF) 
                           : Colors.transparent, // 枠線を変更
-                        width: 1.5,
+                        width: 1.5,                       
                       ),
                       borderRadius: BorderRadius.circular(8),),
                     onTap:(){
@@ -3554,6 +3775,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                   );
                 },
               ),
+              ),
             ),
     ],),
 
@@ -3562,30 +3784,34 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
           Positioned(
             bottom: 16,
             left : 30,
-            child: FloatingActionButton(
+            child: SizedBox(
+          width:40.sp,
+          height:40.sp,
+          child:FloatingActionButton(
               heroTag: null,
               onPressed: ()async{
-              if (_selectedDay == null){
+              if (_getEventsForDay(_selectedDay!).isEmpty ){
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content:Text(L10n.of(context)!.tobedelete)), //'削除対象を選択してください。'
+                SnackBar(content:Text(L10n.of(context)!.tobedelete,style:TextStyle(fontSize:10.sp))), //'削除対象を選択してください。'
               );
-            } else {
+              } else {
               showDialog(
                 context:context,
                 builder:(_) => AlertDialog(
-                  title:Text(L10n.of(context)!.confirm_delete), //'削除確認'
+                  title:Text(L10n.of(context)!.confirm_delete,style:TextStyle(fontSize:15.sp)), //'削除確認'
                   content: Text(
                     L10n.of(context)!.reallydelete  //"本当に削除してもよろしいですか？"
+                    ,style:TextStyle(fontSize:12.sp)
                   ),
                   actions: [
                     TextButton(
-                      child:Text("Cancel",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+                      child:Text("Cancel",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
                       onPressed: () {
                         Navigator.of(context).pop();
                       },
                     ),
                     TextButton(
-                      child:Text("OK",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+                      child:Text("OK",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
                       onPressed: () async{
                         Navigator.of(context).pop();
                           final records = await AttendanceLogic.allRecords();
@@ -3604,23 +3830,25 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                             _initializedEvents(context);  
                           });
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(L10n.of(context)!.deleted)),);  //'削除しました。'
-                      }
-                      
+                            SnackBar(content: Text(L10n.of(context)!.deleted,style:TextStyle(fontSize:10.sp))),);  //'削除しました。'
+                      }                    
                     ),
                   ],
                 )
               );
             }
             },
-
-              child:const Icon(Icons.delete ),
+              child: Icon(Icons.delete ,size:20.sp),
             ),
+          ),
           ),
           Positioned(
             bottom: 16,
             right: 16,
-            child: FloatingActionButton(
+            child: SizedBox(
+          width:40.sp,
+          height:40.sp,
+          child:FloatingActionButton(
               onPressed: ()async{
                 final result = await _showAddAttendanceModal(context,_selectedDay ?? DateTime.now());
                 if (result != null){
@@ -3631,8 +3859,9 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                   _initializedEvents(context);});
                 }   
               },
-              child:const Icon(Icons.playlist_add ),
+              child: Icon(Icons.playlist_add ,size:20.sp),
             ),
+          ),
           ),
         ],
           ),
@@ -3684,11 +3913,12 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
       return StatefulBuilder(
         builder:(BuildContext context,StateSetter setState){
       return AlertDialog(
-        title: Text(L10n.of(context)!.edit),  //編集
+        title: Text(L10n.of(context)!.edit,style:TextStyle(fontSize:15.sp)),  //編集
         content: SingleChildScrollView(
           child: Column(children:[
           Align(  alignment: Alignment.centerLeft,
-            child: Text(intl.DateFormat('y-M-dd(EEE)').format(displayDate)),),
+            child: Text(intl.DateFormat('y-M-dd(EEE)').format(displayDate),style:TextStyle(fontSize:15.sp)),),
+          SizedBox(height:10.sp),
           TextButton(          
             style: TextButton.styleFrom(
               side: const BorderSide(color:Colors.grey,width:1),
@@ -3701,8 +3931,9 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                 setState((){ checkInTime = time; });          
               }
             },
-            child: Text(checkInTime != null ? "${L10n.of(context)!.attendance_time}：${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime!, alwaysUse24HourFormat: true)}" : '${L10n.of(context)!.attendance_time}：${item['check_in']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+            child: Text(checkInTime != null ? "${L10n.of(context)!.attendance_time}：${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime!, alwaysUse24HourFormat: true)}" : '${L10n.of(context)!.attendance_time}：${item['check_in']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:15.sp)),
           ),
+          SizedBox(height:10.sp),
           TextButton(        
             style: TextButton.styleFrom(
               side: const BorderSide(color:Colors.grey,width:1),
@@ -3715,8 +3946,9 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                 setState((){ checkOutTime = time; });
               }
             },
-            child: Text(checkOutTime != null ? "${L10n.of(context)!.leavework_time}：${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime!, alwaysUse24HourFormat: true)}" : '${L10n.of(context)!.leavework_time}：${item['check_out']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+            child: Text(checkOutTime != null ? "${L10n.of(context)!.leavework_time}：${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime!, alwaysUse24HourFormat: true)}" : '${L10n.of(context)!.leavework_time}：${item['check_out']}',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:15.sp)),
           ),
+          SizedBox(height:10.sp),
           Align(
                   alignment:Alignment.centerLeft,
                   child:
@@ -3735,7 +3967,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                               : Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),
                             
                       ),
-                      child: Text(L10n.of(context)!.free,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),  //自由記述
+                      child: Text(L10n.of(context)!.free,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:15.sp)),  //メモ
                     ),
           ),
           FutureBuilder<List<Map<String,dynamic>>>(
@@ -3753,8 +3985,8 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
 
                     return Container(
                       margin: const EdgeInsets.fromLTRB(0,10,0,15),
-                      width: MediaQuery.of(context).size.width *0.9,
-                      height: 150,
+                      width: MediaQuery.of(context).size.width *0.8,
+                      height: MediaQuery.of(context).size.height *0.2,
                       decoration: BoxDecoration(
                         border: Border.all(color:Colors.grey),
                         borderRadius: BorderRadius.circular(8),
@@ -3763,9 +3995,9 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                         child:GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            childAspectRatio: 2.8,
+                          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: MediaQuery.of(context).size.height/5,
+                            childAspectRatio: 2.6,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 0.5,
                           ),
@@ -3801,11 +4033,11 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                                 ),
                                 padding:  const EdgeInsets.all(5),
                                 child: Column(
-                          
+                                  mainAxisAlignment:MainAxisAlignment.center,
                                   children: [
                                     Text(
                                       record['overtime_reason'] ?? '',
-                                      style:  const TextStyle(fontSize: 12),
+                                      style:  TextStyle(fontSize: 11.sp),
                                       overflow: TextOverflow.ellipsis, // 長い文字列を省略
                                       maxLines: 1, // 最大2行
                                     ),
@@ -3831,7 +4063,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),),
                       ),
-            child: Text(L10n.of(context)!.cancel,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+            child: Text(L10n.of(context)!.cancel,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
           ),
           TextButton(
             onPressed:()async {
@@ -3861,7 +4093,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),),
                    ),
-            child: Text(L10n.of(context)!.edit,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),  //編集
+            child: Text(L10n.of(context)!.edit,style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),  //編集
           ),
         ],
       );
@@ -3875,16 +4107,39 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
       context:context,
       initialTime: TimeOfDay.fromDateTime(DateTime.now()),
       builder: (context, child) {
-        return Localizations.override(
-          context: context,
-          locale:const Locale('en','US'),
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        return Theme(     
+          data: ThemeData.light().copyWith(
+            timePickerTheme:const TimePickerThemeData(
+              dayPeriodColor:Color.fromARGB(105,50,50,250),
+             ),
+            colorScheme:const ColorScheme.light(
+              primary:Color.fromARGB(255,120,120,230),
+              
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                textStyle: TextStyle(fontSize:13.sp),
+                )
+              ),
+            textTheme: TextTheme(bodyMedium:TextStyle(fontSize:12.sp,color:Colors.black),
+            ),
+          ),
+              
+          child:Localizations.override(
+            context: context,
+            locale: const Locale('en','US'), 
+          child:
+          MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false,
+              size:Size(MediaQuery.of(context).size.width*0.7,
+                MediaQuery.of(context).size.height * 0.7),),
             child: child!,
+          ),
           ),
         );
       },
-    );      
+      helpText:L10n.of(context)!.selecttime,
+      );      
     if (pickedDate != null){
       return pickedDate;
     }
@@ -3912,21 +4167,44 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
       context:context,
       initialTime: TimeOfDay.fromDateTime(DateTime.now()),
       builder: (context, child) {
-        return Localizations.override(
-          context: context,
-          locale:const Locale('en','US'),
-          child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        return Theme(     
+          data: ThemeData.light().copyWith(
+            timePickerTheme:const TimePickerThemeData(
+              dayPeriodColor:Color.fromARGB(105,50,50,250),
+             ),
+            colorScheme:const ColorScheme.light(
+              primary:Color.fromARGB(255,120,120,230),
+              
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                textStyle: TextStyle(fontSize:13.sp),
+                )
+              ),
+            textTheme: TextTheme(bodyMedium:TextStyle(fontSize:12.sp,color:Colors.black),
+            ),
+          ),
+              
+          child:Localizations.override(
+            context: context,
+            locale: const Locale('en','US'), 
+          child:
+          MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false,
+              size:Size(MediaQuery.of(context).size.width*0.7,
+                MediaQuery.of(context).size.height * 0.7),),
             child: child!,
+          ),
           ),
         );
       },
-    );      
+      helpText:L10n.of(context)!.selecttime,
+      );      
     if (pickedDate != null){
       return pickedDate;
     }
       return null;
-    }
+  }
     Future<void> _pickDate(BuildContext context,StateSetter setState)  async {
       DateTime? pickedDate = await showDatePicker(
         context: context,
@@ -3950,22 +4228,22 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
         return AlertDialog(
           title: Column(crossAxisAlignment: CrossAxisAlignment.start,
             children:[
-            Text(L10n.of(context)!.itemname,style:const TextStyle(fontSize:15,)), //'項目名を入力してください。'
+            Text(L10n.of(context)!.itemname,style:TextStyle(fontSize:14.sp,)), //'項目名を入力してください。'
             const SizedBox(height:2),
-            Text(L10n.of(context)!.omission,style:const TextStyle(fontSize:12,),),  //'(15文字以内:長文は一覧では省略されます。)'
+            Text(L10n.of(context)!.omission,style:TextStyle(fontSize:11.sp,),),  //'(15文字以内:長文は一覧では省略されます。)'
             ],),
           content: TextField(
             controller: _controller,
             decoration: InputDecoration(hintText:L10n.of(context)!.here ),  //'ここに入力'
             maxLength:15,
-            
+            style:TextStyle(fontSize:11.sp),
           ),
           actions: [
             TextButton(
               onPressed: (){
                 Navigator.of(context).pop();
               },
-              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
             ),
             TextButton(
               onPressed: ()async {
@@ -3986,7 +4264,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                 }
                 
               },
-              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
             ),
           ],
         );
@@ -4002,7 +4280,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
 
         return AlertDialog(
           title: Text(L10n.of(context)!.newinput, //新規入力
-            style:const TextStyle(fontSize:20),),
+            style:TextStyle(fontSize:19.sp),),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -4020,10 +4298,10 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: Text( intl.DateFormat(dateFormatLong).format(_selectedDate),style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null) ),
+                      child: Text( intl.DateFormat(dateFormatLong).format(_selectedDate),style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:15.sp) ),
                     ),
                 ),
-
+                SizedBox(height:10.sp),
                 TextButton(
                   onPressed: ()async {
                     final time = await _showTimePicker(context);
@@ -4038,8 +4316,9 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                           borderRadius: BorderRadius.circular(8),
                         ),
                   ),
-                  child: Text("${L10n.of(context)!.attendance_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime, alwaysUse24HourFormat: true)}",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),  //出勤時間
+                  child: Text("${L10n.of(context)!.attendance_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkInTime, alwaysUse24HourFormat: true)}",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:13.sp)),  //出勤時間
                 ),
+                SizedBox(height:10.sp),
                 TextButton(             
                   onPressed: ()async {
                     final time = await _showTimePicker(context);
@@ -4054,8 +4333,9 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                           borderRadius: BorderRadius.circular(8),
                         ),
                   ),
-                  child: Text("${L10n.of(context)!.leavework_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime, alwaysUse24HourFormat: true)}",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),   //退勤時間
+                  child: Text("${L10n.of(context)!.leavework_time} : ${MaterialLocalizations.of(context).formatTimeOfDay(checkOutTime, alwaysUse24HourFormat: true)}",style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:13.sp)),   //退勤時間
                 ),
+                SizedBox(height:10.sp),
                 Align(
                   alignment:Alignment.centerLeft,
                   child:
@@ -4074,7 +4354,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                               : Theme.of(context).brightness == Brightness.dark ? Colors.black :const Color.fromARGB(255,235,235,255),                         
                       ),
                       child: Text(L10n.of(context)!.free, //自由記述
-                        style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+                        style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:12.sp)),
                     ),
                 ),
 
@@ -4092,8 +4372,8 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
 
                     return Container(
                       margin: const EdgeInsets.fromLTRB(0,10,0,15),
-                      width: MediaQuery.of(context).size.width *0.9,
-                      height: 150,
+                      width: MediaQuery.of(context).size.width *0.8,
+                      height: MediaQuery.of(context).size.height *0.2,
                       decoration: BoxDecoration(
                         border: Border.all(color:Colors.grey),
                         borderRadius: BorderRadius.circular(8),
@@ -4102,9 +4382,9 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                         child:GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            childAspectRatio: 2.8,
+                          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: MediaQuery.of(context).size.height/5,
+                            childAspectRatio: 2.6,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 0.5,
                           ),
@@ -4140,11 +4420,11 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                                 ),
                                 padding:  const EdgeInsets.all(5),
                                 child: Column(
-                          
+                                  mainAxisAlignment:MainAxisAlignment.center,
                                   children: [
                                     Text(
                                       record['overtime_reason'] ?? '',
-                                      style:  const TextStyle(fontSize: 12),
+                                      style:  TextStyle(fontSize: 11.sp),
                                       overflow: TextOverflow.ellipsis, // 長い文字列を省略
                                       maxLines: 1, // 最大2行
                                     ),
@@ -4177,13 +4457,14 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),),
                       ),
-                      child:Text(L10n.of(context)!.cancel),
+                      child:Text(L10n.of(context)!.cancel,style:TextStyle(fontSize:12.sp)),
                     ),
                     const SizedBox(width:10),
                     TextButton(
                       onPressed: ()async {
                         final overReason = selectedIndices.toList();
                         final overtimeReason = overReason.join(',');
+                        print("_selectedDate:$_selectedDate ,checkInTime:$checkInTime ,checkOutTime:$checkOutTime");
                         await AttendanceUtils.addAttendance(
                           context:context,
                           date:_selectedDate,
@@ -4202,7 +4483,7 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),),
                       ),
-                      child:Text(L10n.of(context)!.regist), //登録
+                      child:Text(L10n.of(context)!.regist,style:TextStyle(fontSize:12.sp)), //登録
                     ),
 
                   ]
@@ -4227,28 +4508,28 @@ class _AttendanceListScreenCalendarState extends State<AttendanceListScreenCalen
         return AlertDialog(
           title:  Column(crossAxisAlignment: CrossAxisAlignment.start,
             children:[
-            Text(L10n.of(context)!.content_input,style:const TextStyle(fontSize:15,)), //'内容を入力してください。'
+            Text(L10n.of(context)!.content_input,style: TextStyle(fontSize:14.sp,)), //'内容を入力してください。'
             const SizedBox(height:2),
-            Text(L10n.of(context)!.twentychar,style:const TextStyle(fontSize:12,),),  //'(20文字以内)'
+            Text(L10n.of(context)!.twentychar,style: TextStyle(fontSize:11.sp,),),  //'(20文字以内)'
             ],),
           content: TextField(
             controller: _controller,
             decoration: InputDecoration(hintText: L10n.of(context)!.here),  //'ここに入力'
             maxLength:20,
-            
+            style:TextStyle(fontSize:11.sp),
           ),
           actions: [
             TextButton(
               onPressed: (){
                   Navigator.of(context).pop(free);                 
               },
-              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              child: Text('Cancel',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:10.sp)),
             ),
             TextButton(
               onPressed: ()async {
                 Navigator.of(context).pop((_controller.text).trim());
               },
-              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null)),
+              child: Text('OK',style:TextStyle(color:Theme.of(context).brightness == Brightness.dark ? Colors.white :null,fontSize:10.sp)),
             ),
           ],
         );

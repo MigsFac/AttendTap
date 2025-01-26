@@ -33,7 +33,7 @@ android {
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = 9
-        versionName = "1.0.0"
+        versionName = "1.3.0"
         buildConfigField("String", "ADMOB_APP_ID", "\"${localProperties["ADMOB_APP_ID"]}\"")
         resValue "string", "ADMOB_APP_ID", "\"${localProperties['ADMOB_APP_ID']}\""
     }

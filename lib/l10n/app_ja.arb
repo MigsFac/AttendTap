@@ -19,6 +19,7 @@
     "notoverwrite":"上書きしない",
     "overwrite":"上書きする",
     "unregistered":"未登録",
+    "selecttime":"時間選択",
 
     "preparation":"始業準備",
     "meeting":"会議",

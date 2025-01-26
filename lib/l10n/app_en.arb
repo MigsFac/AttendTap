@@ -19,11 +19,12 @@
     "notoverwrite":"Do not overwrite",
     "overwrite":"Overwrite",
     "unregistered":"Unregistered",
+    "selecttime":"Select Time",
 
     "preparation":"Preparation",
     "meeting":"Meeting",
 
-    "date_format":"yyyy-MM-dd (EEE)",
+    "date_format":"yyyy/MM/dd (EEE)",
     "content_input":"Enter the content.",
     "twentychar":"(Up to 20 characters)",
     "here":"Enter here",
